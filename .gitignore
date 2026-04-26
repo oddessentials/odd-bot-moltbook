@@ -1,0 +1,18 @@
+# agent-brief is a separate project with its own .git lifecycle
+agent-brief/
+
+# Runtime output — never committed
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.egg-info/
+
+# OS / editor
+.DS_Store
+*.swp
+*.swo

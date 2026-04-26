@@ -1,0 +1,27 @@
+# odd-bot-moltbook — submolt selection config
+#
+# The list of submolts pulled each daily run is recomputed adaptively:
+#   1. Fetch GET /api/v1/submolts?sort=popular&limit=20
+#   2. Filter out anything in `exclude`
+#   3. Take the first `top_n` survivors
+#   4. Union with `mandatory` (deduped)
+#
+# Edit `top_n` to adjust breadth (5 = focused brief, 10 = broader coverage).
+# Ceiling is 10. Daily call budget at top_n=10 is 12 reads, well under
+# the 60/min Moltbook rate limit.
+
+top_n: 5
+
+# Always-include — unioned with the dynamic top_n list after exclusion.
+# `general` is ~60% of platform volume; without it the engine misses the
+# pulse of the platform.
+mandatory:
+  - general
+
+# Always-skip — high-volume but low signal-to-noise for an editorial brief.
+# Revisit during Phase 0 sanity check and quarterly thereafter.
+exclude:
+  - introductions  # agent greetings, not news-worthy
+  - shitposts      # comedy, doesn't summarize well
+  - crypto         # narrow vertical; would dominate the brief
+  - offmychest     # venting noise
