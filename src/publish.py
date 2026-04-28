@@ -322,18 +322,22 @@ def acquire_lock(path: Path = LOCK_PATH) -> Iterator[None]:
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(str(path), os.O_RDWR | os.O_CREAT, 0o600)
     try:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            os.close(fd)
-            raise
+        # Non-blocking exclusive lock. BlockingIOError on contention
+        # propagates to the caller; finally still runs to close fd.
+        # Do NOT close fd here on the BlockingIOError path — that would
+        # double-close (finally also closes), leaking an EBADF that
+        # masks the real BlockingIOError at the caller.
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         yield
     finally:
         try:
             fcntl.flock(fd, fcntl.LOCK_UN)
         except OSError:
-            pass
-        os.close(fd)
+            pass  # never acquired (e.g., on the BlockingIOError path)
+        try:
+            os.close(fd)
+        except OSError:
+            pass  # defensive — fd should always be valid here
 
 
 # =============================================================================
@@ -758,11 +762,22 @@ def main() -> int:
     if args.cmd != "daily-publish":
         return 1
 
+    # Dry-run is purely read-only: no lock acquisition (which would also
+    # create data/.run.lock as a side effect) and no exclusion against a
+    # real parallel run. Atomic writes elsewhere (briefs.json, summary.json,
+    # runs.jsonl append) guarantee dry-run readers see consistent state
+    # even mid-real-run.
+    if args.dry_run:
+        return run_daily_publish(
+            max_backlog=args.max_backlog,
+            dry_run=True,
+        )
+
     try:
         with acquire_lock():
             return run_daily_publish(
                 max_backlog=args.max_backlog,
-                dry_run=args.dry_run,
+                dry_run=False,
             )
     except BlockingIOError:
         print("another run-daily-publish in progress; exiting 0")
