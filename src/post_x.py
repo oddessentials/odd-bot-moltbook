@@ -444,26 +444,35 @@ def main() -> int:
     # closure is never called, the refresh endpoint is never hit, and
     # the production refresh_token is never consumed. This is the hard
     # invariant: never call X if the sidecar already has the brief id.
+    # Defensive .strip() on every secret-derived env var. GitHub
+    # repo-secret values copy-pasted from a clipboard or `gh secret
+    # set` heredoc commonly carry a trailing newline; httpx's HTTP/1.1
+    # header validator rejects newlines as `Illegal header value`,
+    # which is how the second post-merge dispatch failed before this
+    # was added. Stripping is safe because none of these credentials
+    # are valid as multi-line strings.
+    x_client_id = os.environ["X_CLIENT_ID"].strip()
+    x_client_secret = os.environ["X_CLIENT_SECRET"].strip()
+    x_refresh_token = os.environ["X_REFRESH_TOKEN"].strip()
+    anthropic_key = os.environ["ANTHROPIC_API_KEY"].strip()
+
     cached_access_token: dict[str, Optional[str]] = {"value": None}
 
     def tweet_poster(text: str) -> str:
         if cached_access_token["value"] is None:
-            current_refresh = os.environ["X_REFRESH_TOKEN"]
             response = _refresh_access_token(
-                os.environ["X_CLIENT_ID"],
-                os.environ["X_CLIENT_SECRET"],
-                current_refresh,
+                x_client_id,
+                x_client_secret,
+                x_refresh_token,
             )
             cached_access_token["value"] = response["access_token"]
             # Writeback BEFORE posting iff X rotated. If writeback
             # raises (PAT issue, rate limit), the tweet never sends —
             # no public side effect, recoverable by fixing the PAT.
             new_refresh = response.get("refresh_token")
-            if new_refresh and new_refresh != current_refresh:
+            if new_refresh and new_refresh != x_refresh_token:
                 _writeback_refresh_token(new_refresh)
         return _post_tweet(text, cached_access_token["value"])
-
-    anthropic_key = os.environ["ANTHROPIC_API_KEY"]
 
     def joke_synthesizer(brief: dict) -> str:
         return _synthesize_joke(brief, anthropic_key)
