@@ -496,34 +496,60 @@ def run_daily_publish(
         _git("add", "data/briefs.json", "docs/")
         commit_msg = _format_commit_message(published_this_run)
         _git("commit", "-m", commit_msg)
-
-        if not _working_tree_clean():
-            raise RuntimeError(
-                "working tree dirty after commit — invariant violation; "
-                "investigate before next run"
-            )
     except Exception:
-        # Revert briefs.json + docs/ to the deployed-state snapshot so the
-        # next run sees a consistent "what's actually deployed" view. Drafts
-        # on disk were never flipped this run — nothing else to undo.
+        # Revert to the deployed-state snapshot so the next run sees a
+        # consistent "what's actually deployed" view. Three steps in order:
+        #
+        #   (1) Unstage. If `git add` ran but `git commit` failed (e.g., a
+        #       pre-commit hook rejected the commit), the INDEX still holds
+        #       the staged briefs.json + docs/ changes — leaving them
+        #       staged would mean the next manual `git commit` would deploy
+        #       the failed-state content. Reset clears the index for these
+        #       paths back to HEAD.
+        #   (2) Restore briefs.json working tree to the deployed snapshot.
+        #   (3) Restore tracked docs/ working tree to HEAD. Any untracked
+        #       cruft from the partial build remains but is wiped by the
+        #       next successful build (Vite emptyOutDir).
+        #
+        # Drafts on disk were never flipped this run — nothing else to undo.
         # `run_daily`'s side effects (today's summary.json draft, posts_raw
-        # rows, daily run record) are durable; they're re-used by the next
-        # run via the orphan-promotion path, so the LLM call isn't repeated.
+        # rows, daily run record) are durable; the next run reuses them via
+        # orphan-promotion, so the LLM call isn't repeated.
         print(
-            "build/commit pipeline failed; reverting briefs.json + docs/ "
-            "to last-deployed state to avoid stranding entries before deploy"
+            "build/commit pipeline failed; reverting index + briefs.json + "
+            "docs/ to last-deployed state to avoid stranding entries before deploy"
         )
+        try:
+            _git("reset", "HEAD", "--", "data/briefs.json", "docs/")
+        except Exception:
+            pass  # nothing-to-reset is also a 0 exit; tolerate either
         _atomic_write_text(BRIEFS_PATH, json.dumps(deployed_briefs, indent=2) + "\n")
         try:
             _git("checkout", "--", "docs/")
         except Exception:
-            pass  # best-effort; the next successful build replaces docs/ regardless
+            pass  # best-effort; next successful build replaces docs/ regardless
         raise
 
-    # Commit landed. Now finalize durable post-commit side effects:
-    # flip on-disk draft statuses + append publish run records. These are
-    # ordered AFTER the commit deliberately — until the deploy snapshot is
-    # captured in git, the per-date entries aren't truly "published."
+    # Commit landed. Post-commit invariant check: working tree must be
+    # clean. This runs OUTSIDE the try/except so a failing check does NOT
+    # trigger the revert path (the commit is already in HEAD; reverting
+    # briefs.json to the pre-commit snapshot would diverge it from HEAD's
+    # content, leaving the working tree inconsistent rather than restoring
+    # cleanliness). If this fails, the run hard-aborts; the commit is
+    # local-only until operator cleanup, and next run's pre-flight push
+    # will retry the deploy.
+    if not _working_tree_clean():
+        diag = _git("status", "--porcelain").stdout
+        raise RuntimeError(
+            f"working tree dirty after commit {_head_sha()[:7]} — "
+            f"investigate before next run. Commit IS in HEAD; push "
+            f"deferred until cleanup. git status:\n{diag}"
+        )
+
+    # Now finalize durable post-commit side effects: flip on-disk draft
+    # statuses + append publish run records. Drafts are gitignored so
+    # they're not part of the commit; they're a local-state mirror of
+    # the publish event. Run records are gitignored too (data/runs.jsonl).
     for d, new_payload, used_live_fetch in proposed_per_date:
         _flip_draft_to_published(d, new_payload)
         append_run_record({
