@@ -18,22 +18,36 @@ Flow per run:
         [today − max_backlog + 1, today] ∩ [START_FLOOR, today]
      minus already-published ids in `data/briefs.json`.
 
-  4. Per-date atomic loop, ascending. For each candidate:
+  4. Per-date discovery loop, ascending. For each candidate:
         - draft on disk → orphan-promote (no fetch, any date).
-        - else if d == today → live-API fetch + synth + persist.
+        - else if d == today → live-API fetch + synth + persist as draft.
         - else → skip (HC-2: live-API cannot backfill past dates).
-     Then: merge into briefs.json, flip draft status to published,
-     append publish run record. Any step raising stops the loop;
-     later dates are skipped this run and retry next run.
+     Accumulate proposed merges into an in-memory list. NOTHING in the
+     public-surface state (briefs.json, draft-status flips, publish run
+     records) is written here — those are deferred until the commit
+     pipeline succeeds, so a build/commit failure cannot strand entries
+     between local "published" file state and the actual deployed state.
 
-  5. If anything published this run:
-        a. `pnpm --dir agent-brief build` (Phase 4 wires Vite outDir
-           to repo-root /docs/; until then this call fails and the
-           run aborts before commit — correct safety posture).
-        b. assert /docs/index.html mtime > build_started_ts.
-        c. git add data/briefs.json docs/; git commit.
-        d. assert working tree clean after commit.
-        e. git push. Failure → record deferred state, exit 0.
+  5. If anything proposed this run:
+        a. Snapshot deployed briefs.json (for revert).
+        b. Write briefs.json with all proposed merges (Vite reads it).
+        c. `pnpm --dir agent-brief build` → /docs/ + 404 fallback.
+        d. assert /docs/index.html mtime > build_started_ts.
+        e. git add data/briefs.json docs/; git commit.
+        f. assert working tree clean after commit.
+     If b–f raises, REVERT briefs.json to the deployed snapshot and
+     `git checkout -- docs/`. Drafts on disk were never flipped, so
+     no further undo needed. run_daily's durable side effects (today's
+     summary.json, posts_raw rows, daily run record) are kept — the
+     next run reuses them via orphan promotion, no LLM re-call.
+
+  6. After successful commit: flip on-disk draft statuses to published
+     and append publish run records. These are post-commit because until
+     the deploy snapshot is captured in git, the entries aren't truly
+     published.
+
+  7. git push. Failure → record deferred state, exit 0; commit IS the
+     local deploy state, push is just remote sync.
 
   6. Always: write data/.last-run-state.json (telemetry mirror of
      `git rev-list @{u}..@ --count`, the AHEAD-of-remote count).
@@ -396,9 +410,20 @@ def run_daily_publish(
                 print(f"  {d}: would skip (no draft; live-API cannot backfill)")
         return 0
 
-    # Per-date atomic loop. Ascending order = chronological audit trail.
+    # Snapshot the deployed-state briefs for revert if the commit pipeline
+    # fails. "Deployed state" = whatever briefs.json currently holds, which
+    # by the contract reflects the last successful commit (only the orchestrator
+    # writes briefs.json, and it only does so when commit pipeline succeeds —
+    # see the revert path below).
+    deployed_briefs = list(briefs)
+
+    # Per-date discovery loop. Ascending order = chronological audit trail.
+    # NOTHING is written to disk for the "publish" event yet — briefs.json
+    # write, draft-status flip, and publish run records are all deferred
+    # until commit pipeline succeeds. This refuses to strand entries between
+    # local "published" file state and the actual deployed state.
     live_fetch_invocations = 0
-    published_this_run: list[str] = []
+    proposed_per_date: list[tuple[date, dict, bool]] = []
 
     for d in candidates:
         # Snapshot draft existence BEFORE potentially calling run_daily
@@ -412,7 +437,7 @@ def run_daily_publish(
             # but merge/build/commit failed before completing).
             brief = _load_draft(d)
             used_live_fetch = False
-            print(f"  {d}: orphan-draft promotion")
+            print(f"  {d}: orphan-draft promotion (deferred until commit)")
         elif d == today:
             # Only path that performs a live fetch.
             live_fetch_invocations += 1
@@ -434,31 +459,17 @@ def run_daily_publish(
             print(f"  {d}: no draft, skipping (live-API cannot backfill)")
             continue
 
-        # Atomic per-date publish step. Order: merge briefs.json first
-        # (public surface), then flip draft status, then run record.
-        # Any step raising stops the loop; later dates not touched this run.
         new_payload = json.loads(brief.model_dump_json())
         new_payload["status"] = "published"
         briefs = merge_brief(briefs, new_payload)
-        _atomic_write_text(BRIEFS_PATH, json.dumps(briefs, indent=2) + "\n")
-        _flip_draft_to_published(d, new_payload)
-        append_run_record({
-            "run_id": f"publish-{d.isoformat()}-{started.strftime('%H%M%SZ')}",
-            "action": "publish",
-            "id": new_payload["id"],
-            "date": d.isoformat(),
-            "ts": datetime.now(timezone.utc).isoformat(),
-            "live_fetch_invocations": 1 if used_live_fetch else 0,
-        })
-        published_this_run.append(new_payload["id"])
-        print(f"  {d}: published as {new_payload['id']}")
+        proposed_per_date.append((d, new_payload, used_live_fetch))
 
     # Invariant assertion at run boundary.
     assert live_fetch_invocations <= 1, (
         f"live_fetch_invocations={live_fetch_invocations} violates invariant"
     )
 
-    if not published_this_run:
+    if not proposed_per_date:
         print("no new entries this run; clean exit")
         _write_run_state({
             "phase": "complete",
@@ -471,19 +482,58 @@ def run_daily_publish(
         })
         return 0
 
-    # Build → commit → push.
-    build_started_ts = datetime.now(timezone.utc).timestamp()
-    _run_build(build_started_ts)
+    # Write briefs.json so Vite picks it up at build time. From here through
+    # the successful commit, anything raising MUST revert briefs.json (and
+    # docs/) so the next run's discovery doesn't see a "published" entry
+    # that isn't actually deployed.
+    _atomic_write_text(BRIEFS_PATH, json.dumps(briefs, indent=2) + "\n")
 
-    _git("add", "data/briefs.json", "docs/")
-    commit_msg = _format_commit_message(published_this_run)
-    _git("commit", "-m", commit_msg)
+    published_this_run = [p[1]["id"] for p in proposed_per_date]
+    try:
+        build_started_ts = datetime.now(timezone.utc).timestamp()
+        _run_build(build_started_ts)
 
-    if not _working_tree_clean():
-        raise RuntimeError(
-            "working tree dirty after commit — invariant violation; "
-            "investigate before next run"
+        _git("add", "data/briefs.json", "docs/")
+        commit_msg = _format_commit_message(published_this_run)
+        _git("commit", "-m", commit_msg)
+
+        if not _working_tree_clean():
+            raise RuntimeError(
+                "working tree dirty after commit — invariant violation; "
+                "investigate before next run"
+            )
+    except Exception:
+        # Revert briefs.json + docs/ to the deployed-state snapshot so the
+        # next run sees a consistent "what's actually deployed" view. Drafts
+        # on disk were never flipped this run — nothing else to undo.
+        # `run_daily`'s side effects (today's summary.json draft, posts_raw
+        # rows, daily run record) are durable; they're re-used by the next
+        # run via the orphan-promotion path, so the LLM call isn't repeated.
+        print(
+            "build/commit pipeline failed; reverting briefs.json + docs/ "
+            "to last-deployed state to avoid stranding entries before deploy"
         )
+        _atomic_write_text(BRIEFS_PATH, json.dumps(deployed_briefs, indent=2) + "\n")
+        try:
+            _git("checkout", "--", "docs/")
+        except Exception:
+            pass  # best-effort; the next successful build replaces docs/ regardless
+        raise
+
+    # Commit landed. Now finalize durable post-commit side effects:
+    # flip on-disk draft statuses + append publish run records. These are
+    # ordered AFTER the commit deliberately — until the deploy snapshot is
+    # captured in git, the per-date entries aren't truly "published."
+    for d, new_payload, used_live_fetch in proposed_per_date:
+        _flip_draft_to_published(d, new_payload)
+        append_run_record({
+            "run_id": f"publish-{d.isoformat()}-{started.strftime('%H%M%SZ')}",
+            "action": "publish",
+            "id": new_payload["id"],
+            "date": d.isoformat(),
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "live_fetch_invocations": 1 if used_live_fetch else 0,
+        })
 
     commit_sha = _head_sha()
     ok, push_status = _try_push()
