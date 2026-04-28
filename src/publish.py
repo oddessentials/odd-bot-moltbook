@@ -229,9 +229,9 @@ def _git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
 
 
 def _commits_ahead() -> int:
-    """`git rev-list @..@{u} --count`. Returns 0 if upstream not configured."""
+    """`git rev-list @{u}..@ --count`. Returns 0 if upstream not configured."""
     try:
-        result = _git("rev-list", "@..@{u}", "--count", check=True)
+        result = _git("rev-list", "@{u}..@", "--count", check=True)
     except subprocess.CalledProcessError:
         return 0
     try:
