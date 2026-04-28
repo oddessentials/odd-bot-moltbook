@@ -26,23 +26,52 @@ from pathlib import Path
 from unittest import mock
 
 from src.publish import (
-    discover_work,
-    merge_brief,
+    _emit_per_brief_pages,
     _load_publish_record_ids,
     _reconcile_finalization,
+    _render_per_brief_html,
+    discover_work,
+    merge_brief,
 )
 from src.summarize import STANDARD_DISCLAIMER
 
 
+# Mirrors agent-brief/client/index.html's <head> block: the seven targeted tags
+# the renderer rewrites + the static tags (image, card, site_name) the renderer
+# must NOT touch. Used by both the renderer tests and the emit-loop tests.
+_TEMPLATE_HTML = """\
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>The Agent Brief — Daily AI Agent News</title>
+    <meta property="og:title" content="The Agent Brief — Daily AI Agent News" />
+    <meta property="og:description" content="A short, daily brief on AI agents." />
+    <meta property="og:image" content="https://news.oddessentials.ai/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:url" content="https://news.oddessentials.ai/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Agent Brief Daily" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="The Agent Brief — Daily AI Agent News" />
+    <meta name="twitter:description" content="A short, daily brief on AI agents." />
+    <meta name="twitter:image" content="https://news.oddessentials.ai/og-image.png" />
+  </head>
+  <body><div id="root"></div></body>
+</html>
+"""
+
+
 def _brief(brief_id: str, *, status: str = "published", date_: str | None = None,
-           issue: int = 1) -> dict:
+           issue: int = 1, title: str | None = None, dek: str = "d") -> dict:
     """Brief shape that passes the Pydantic Brief schema."""
     return {
         "id": brief_id,
         "issueNo": issue,
         "date": date_ or brief_id,
-        "title": f"title for {brief_id}",
-        "dek": "d",
+        "title": title if title is not None else f"title for {brief_id}",
+        "dek": dek,
         "readingMinutes": 1,
         "tags": ["Agents"],
         "items": [],
@@ -195,6 +224,180 @@ class TestReconcileFinalization(_ReconcileBase):
         self.assertEqual(json.loads(path.read_text())["status"], "draft")
         # No runs.jsonl mutation
         self.assertFalse(self.runs_path.exists())
+
+
+class TestRenderPerBriefHtml(unittest.TestCase):
+    """Per-brief OG/Twitter meta rewriter. Pure function — no I/O."""
+
+    def test_basic_render_replaces_seven_tags(self):
+        brief = _brief("2026-04-28", issue=118,
+                       title="Headline of the day", dek="A subtitle.")
+        out = _render_per_brief_html(_TEMPLATE_HTML, brief)
+        self.assertIn(
+            "<title>Headline of the day — Agent Brief Daily</title>", out)
+        self.assertIn(
+            '<meta property="og:title" content="Headline of the day" />', out)
+        self.assertIn(
+            '<meta property="og:description" content="Issue 118 · A subtitle." />',
+            out)
+        self.assertIn(
+            '<meta property="og:url" '
+            'content="https://news.oddessentials.ai/brief/2026-04-28" />',
+            out)
+        self.assertIn(
+            '<meta property="og:type" content="article" />', out)
+        self.assertIn(
+            '<meta name="twitter:title" content="Headline of the day" />', out)
+        self.assertIn(
+            '<meta name="twitter:description" content="Issue 118 · A subtitle." />',
+            out)
+
+    def test_html_escaping_title(self):
+        brief = _brief("2026-04-28", issue=1,
+                       title='Foo "bar" & <baz>')
+        out = _render_per_brief_html(_TEMPLATE_HTML, brief)
+        self.assertIn(
+            '<meta property="og:title" '
+            'content="Foo &quot;bar&quot; &amp; &lt;baz&gt;" />',
+            out)
+        self.assertIn(
+            '<meta name="twitter:title" '
+            'content="Foo &quot;bar&quot; &amp; &lt;baz&gt;" />',
+            out)
+        # The unescaped form must not survive into the rendered output.
+        self.assertNotIn('Foo "bar" & <baz>', out)
+
+    def test_html_escaping_dek(self):
+        brief = _brief("2026-04-28", issue=1,
+                       dek='A & B "quoted" <c>')
+        out = _render_per_brief_html(_TEMPLATE_HTML, brief)
+        self.assertIn(
+            '<meta property="og:description" '
+            'content="Issue 1 · A &amp; B &quot;quoted&quot; &lt;c&gt;" />',
+            out)
+        self.assertIn(
+            '<meta name="twitter:description" '
+            'content="Issue 1 · A &amp; B &quot;quoted&quot; &lt;c&gt;" />',
+            out)
+        self.assertNotIn('A & B "quoted" <c>', out)
+
+    def test_description_includes_issue_number_and_escaped_dek(self):
+        """Locked spec: og:description = 'Issue {issueNo} · {dek}', dek escaped."""
+        brief = _brief("2026-04-28", issue=99,
+                       dek='A & B "quoted"')
+        out = _render_per_brief_html(_TEMPLATE_HTML, brief)
+        # Both descriptions carry the issue number AND the escaped dek.
+        expected = (
+            'content="Issue 99 · A &amp; B &quot;quoted&quot;" />'
+        )
+        self.assertIn('<meta property="og:description" ' + expected, out)
+        self.assertIn('<meta name="twitter:description" ' + expected, out)
+        # Unescaped dek must not appear.
+        self.assertNotIn('A & B "quoted"', out)
+
+    def test_og_url_uses_brief_id(self):
+        brief = _brief("2026-12-31", issue=1)
+        out = _render_per_brief_html(_TEMPLATE_HTML, brief)
+        self.assertIn(
+            '<meta property="og:url" '
+            'content="https://news.oddessentials.ai/brief/2026-12-31" />',
+            out)
+
+    def test_og_type_flipped_to_article(self):
+        brief = _brief("2026-04-28", issue=1)
+        out = _render_per_brief_html(_TEMPLATE_HTML, brief)
+        self.assertIn('<meta property="og:type" content="article" />', out)
+        self.assertNotIn(
+            '<meta property="og:type" content="website" />', out)
+
+    def test_static_image_and_card_tags_unchanged(self):
+        brief = _brief("2026-04-28", issue=1)
+        out = _render_per_brief_html(_TEMPLATE_HTML, brief)
+        # Image, card, and site_name tags must pass through verbatim — those
+        # are the static-across-all-pages meta the renderer must NOT touch.
+        for unchanged in (
+            '<meta property="og:image" '
+            'content="https://news.oddessentials.ai/og-image.png" />',
+            '<meta property="og:image:width" content="1200" />',
+            '<meta property="og:image:height" content="630" />',
+            '<meta property="og:site_name" content="Agent Brief Daily" />',
+            '<meta name="twitter:card" content="summary_large_image" />',
+            '<meta name="twitter:image" '
+            'content="https://news.oddessentials.ai/og-image.png" />',
+        ):
+            self.assertIn(unchanged, out)
+
+    def test_missing_meta_raises_on_drift(self):
+        # Strip og:title to simulate a future SPA refactor that drops it.
+        broken = _TEMPLATE_HTML.replace(
+            '<meta property="og:title" '
+            'content="The Agent Brief — Daily AI Agent News" />',
+            "",
+        )
+        brief = _brief("2026-04-28", issue=1)
+        with self.assertRaises(RuntimeError) as cm:
+            _render_per_brief_html(broken, brief)
+        msg = str(cm.exception)
+        self.assertIn("drifted", msg)
+        self.assertIn('og:title', msg)
+
+    def test_duplicate_meta_raises_on_drift(self):
+        # Two og:url tags also count as drift (count != 1).
+        broken = _TEMPLATE_HTML.replace(
+            '<meta property="og:url" content="https://news.oddessentials.ai/" />',
+            '<meta property="og:url" content="https://news.oddessentials.ai/" />\n'
+            '    <meta property="og:url" '
+            'content="https://news.oddessentials.ai/extra" />',
+        )
+        brief = _brief("2026-04-28", issue=1)
+        with self.assertRaises(RuntimeError) as cm:
+            _render_per_brief_html(broken, brief)
+        self.assertIn("drifted", str(cm.exception))
+
+
+class TestEmitPerBriefPages(unittest.TestCase):
+    """Per-brief emit loop. Filters to daily-slugged briefs only — weeklies
+    and any other non-daily slug do not produce static OG-card pages.
+    """
+
+    def test_emits_only_daily_slugged_briefs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            docs_root = Path(tmp)
+            briefs = [
+                _brief("2026-04-28", issue=118, title="Daily one"),
+                _brief("2026-W18", date_="2026-04-27", issue=18,
+                       title="Weekly legacy"),
+                _brief("2026-04-27", issue=117, title="Daily two"),
+            ]
+            emitted = _emit_per_brief_pages(briefs, _TEMPLATE_HTML, docs_root)
+            self.assertEqual(set(emitted), {"2026-04-28", "2026-04-27"})
+            self.assertTrue(
+                (docs_root / "brief" / "2026-04-28" / "index.html").exists())
+            self.assertTrue(
+                (docs_root / "brief" / "2026-04-27" / "index.html").exists())
+            # Weekly id must NOT produce any directory or file.
+            self.assertFalse((docs_root / "brief" / "2026-W18").exists())
+
+    def test_empty_briefs_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            docs_root = Path(tmp)
+            emitted = _emit_per_brief_pages([], _TEMPLATE_HTML, docs_root)
+            self.assertEqual(emitted, [])
+            # The brief/ directory should not even exist.
+            self.assertFalse((docs_root / "brief").exists())
+
+    def test_all_weekly_briefs_writes_nothing(self):
+        # Defensive: a briefs list of only legacy weeklies emits zero pages
+        # AND zero directories — no orphan `brief/` shell.
+        with tempfile.TemporaryDirectory() as tmp:
+            docs_root = Path(tmp)
+            briefs = [
+                _brief("2026-W17", date_="2026-04-20", issue=17),
+                _brief("2026-W18", date_="2026-04-27", issue=18),
+            ]
+            emitted = _emit_per_brief_pages(briefs, _TEMPLATE_HTML, docs_root)
+            self.assertEqual(emitted, [])
+            self.assertFalse((docs_root / "brief").exists())
 
 
 if __name__ == "__main__":

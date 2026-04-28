@@ -69,8 +69,10 @@ from __future__ import annotations
 import argparse
 import contextlib
 import fcntl
+import html
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import date, datetime, timedelta, timezone
@@ -108,6 +110,24 @@ DEFAULT_MAX_BACKLOG = 3
 # 2026-01-30 draft, which is pre-flip provenance and intentionally
 # stays as a draft per D5-B).
 START_FLOOR = date(2026, 4, 27)
+
+# Canonical site URL — used for per-brief og:url. Mirrors src/post_x.py's
+# X_DOMAIN; the duplication is intentional (publish doesn't import post_x).
+# If you change one, change both.
+SITE_URL = "https://news.oddessentials.ai"
+
+# Pre-compiled patterns for the seven meta tags _render_per_brief_html
+# rewrites. Each is attribute-order-insensitive and tolerates `>` vs ` />`
+# self-closing styles. Patterns target the SPA template at
+# agent-brief/client/index.html — a non-1 match count raises (template
+# drift detection).
+_TITLE_TAG_RE = re.compile(r"<title[^>]*>[^<]*</title>", re.IGNORECASE)
+_OG_TITLE_RE = re.compile(r'<meta[^>]*\bproperty="og:title"[^>]*/?>', re.IGNORECASE)
+_OG_DESC_RE = re.compile(r'<meta[^>]*\bproperty="og:description"[^>]*/?>', re.IGNORECASE)
+_OG_URL_RE = re.compile(r'<meta[^>]*\bproperty="og:url"[^>]*/?>', re.IGNORECASE)
+_OG_TYPE_RE = re.compile(r'<meta[^>]*\bproperty="og:type"[^>]*/?>', re.IGNORECASE)
+_TW_TITLE_RE = re.compile(r'<meta[^>]*\bname="twitter:title"[^>]*/?>', re.IGNORECASE)
+_TW_DESC_RE = re.compile(r'<meta[^>]*\bname="twitter:description"[^>]*/?>', re.IGNORECASE)
 
 
 # =============================================================================
@@ -405,14 +425,83 @@ def _try_push() -> tuple[bool, str]:
 # Build invocation
 # =============================================================================
 
-def _run_build(build_started_ts: float) -> None:
+def _render_per_brief_html(template_html: str, brief: dict) -> str:
+    """Rewrite the SPA index.html template with brief-specific OG/Twitter meta.
+
+    Pure (no I/O). Required brief fields: id (str), title (str), dek (str),
+    issueNo (int). Returns a new HTML string; template_html is not mutated.
+
+    Raises RuntimeError if any of the seven targeted tags doesn't match
+    exactly once in the template — drift detection so a future Vite/SPA
+    change that strips or duplicates Card meta surfaces here, not silently
+    as broken X cards on the live site.
+
+    Per-brief rewrites:
+      <title>          → "{title} — Agent Brief Daily"
+      og:title         → brief.title (HTML-escaped)
+      og:description   → "Issue {issueNo} · {dek}" (dek HTML-escaped)
+      og:url           → SITE_URL/brief/{id}
+      og:type          → "article" (was "website")
+      twitter:title    → brief.title (HTML-escaped)
+      twitter:description → "Issue {issueNo} · {dek}" (dek HTML-escaped)
+
+    Static across all per-brief pages (NOT touched here):
+      og:image, og:image:width, og:image:height, og:site_name,
+      twitter:card, twitter:image, all favicon/theme tags.
+    """
+    title = html.escape(brief["title"], quote=True)
+    dek_escaped = html.escape(brief["dek"], quote=True)
+    issue_no = brief["issueNo"]
+    description = f"Issue {issue_no} · {dek_escaped}"
+    canonical_url = f"{SITE_URL}/brief/{brief['id']}"
+
+    rewrites: list[tuple[re.Pattern[str], str, str]] = [
+        (_TITLE_TAG_RE,
+         f"<title>{title} — Agent Brief Daily</title>",
+         "<title>"),
+        (_OG_TITLE_RE,
+         f'<meta property="og:title" content="{title}" />',
+         'meta property="og:title"'),
+        (_OG_DESC_RE,
+         f'<meta property="og:description" content="{description}" />',
+         'meta property="og:description"'),
+        (_OG_URL_RE,
+         f'<meta property="og:url" content="{canonical_url}" />',
+         'meta property="og:url"'),
+        (_OG_TYPE_RE,
+         '<meta property="og:type" content="article" />',
+         'meta property="og:type"'),
+        (_TW_TITLE_RE,
+         f'<meta name="twitter:title" content="{title}" />',
+         'meta name="twitter:title"'),
+        (_TW_DESC_RE,
+         f'<meta name="twitter:description" content="{description}" />',
+         'meta name="twitter:description"'),
+    ]
+
+    out = template_html
+    for pattern, replacement, label in rewrites:
+        new_out, count = pattern.subn(replacement, out)
+        if count != 1:
+            raise RuntimeError(
+                f"per-brief HTML render: expected exactly one {label} tag "
+                f"in template; got {count}. SPA template may have drifted — "
+                f"check agent-brief/client/index.html"
+            )
+        out = new_out
+    return out
+
+
+def _run_build(build_started_ts: float, briefs: list[dict]) -> None:
     """Invoke `pnpm --dir agent-brief build`. Verify /docs/index.html refreshed.
 
-    Phase 2 ships this orchestration unchanged; Phase 4 wires Vite's
-    `build.outDir` to repo-root `/docs/` and adds `agent-brief/public/`
-    assets (CNAME, .nojekyll). Until Phase 4 lands, this call will fail
-    and the run aborts before commit — which is the correct safety
-    posture for a partial migration.
+    After the SPA build succeeds, emit per-brief static HTML at
+    docs/brief/<id>/index.html for every entry in `briefs`. These files
+    override GitHub Pages' SPA fallback for crawler requests at
+    /brief/<id>, so X.com's Card crawler reads brief-specific og:title
+    and og:description and renders a per-tweet card. Vite's emptyOutDir
+    wiped the prior /docs/brief/ tree before this call, so emission
+    regenerates cleanly from briefs.json — the source of truth.
     """
     subprocess.run(
         ["pnpm", "--dir", str(AGENT_BRIEF_DIR), "build"],
@@ -422,13 +511,46 @@ def _run_build(build_started_ts: float) -> None:
     if not DOCS_INDEX.exists():
         raise RuntimeError(
             f"build completed but {DOCS_INDEX} is missing — "
-            "Vite outDir misconfigured (Phase 4 prerequisite)"
+            "Vite outDir misconfigured"
         )
     if DOCS_INDEX.stat().st_mtime <= build_started_ts:
         raise RuntimeError(
             f"build completed but {DOCS_INDEX} mtime not refreshed — "
             "stale artifact suspected"
         )
+
+    template_html = DOCS_INDEX.read_text()
+    _emit_per_brief_pages(briefs, template_html, DOCS_PATH)
+
+
+def _emit_per_brief_pages(
+    briefs: list[dict], template_html: str, docs_root: Path,
+) -> list[str]:
+    """Emit `docs_root/brief/<id>/index.html` for each daily-slugged brief.
+
+    Filter rationale: the X-post path is daily-only (`src/post_x.py:_DAILY_ID_RE`)
+    and the per-brief OG card feature exists to support those tweets. Weekly
+    legacy ids (e.g., `2026-W18`) and any future non-daily slug are intentionally
+    skipped — emitting public OG-card pages for them would create promotable
+    artifacts for content outside the tweet workflow's scope. The SPA's wouter
+    route still resolves `/brief/<weekly-id>` client-side via the 404.html
+    fallback; we just don't generate a static crawler-targeted shell for them.
+
+    Returns the ordered list of brief ids actually emitted (skipped ids
+    are not included). Pure with respect to its inputs; the only side
+    effect is the per-id file write.
+    """
+    emitted: list[str] = []
+    for brief in briefs:
+        brief_id = brief.get("id", "")
+        if not DAILY_SLUG.match(brief_id):
+            continue
+        rendered = _render_per_brief_html(template_html, brief)
+        out_path = docs_root / "brief" / brief_id / "index.html"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(rendered)
+        emitted.append(brief_id)
+    return emitted
 
 
 # =============================================================================
@@ -641,7 +763,7 @@ def run_daily_publish(
     published_this_run = [p[1]["id"] for p in proposed_per_date]
     try:
         build_started_ts = datetime.now(timezone.utc).timestamp()
-        _run_build(build_started_ts)
+        _run_build(build_started_ts, briefs)
 
         _git("add", "data/briefs.json", "docs/")
         commit_msg = _format_commit_message(published_this_run)
