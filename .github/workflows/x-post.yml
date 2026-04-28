@@ -1,0 +1,94 @@
+name: x-post
+
+# Downstream consumer of the publisher's commit to data/briefs.json.
+# Posts each newly-published daily brief to @oddessentials on X.
+# Idempotency contract + ordering rules: see memory
+# `x_post_downstream_plan.md` and `src/post_x.py`.
+
+on:
+  push:
+    branches: [main]
+    paths: [data/briefs.json]
+  workflow_dispatch:
+    inputs:
+      before_ref:
+        description: >-
+          Git ref to use as 'before' for the diff range. Empty (default)
+          means initial-push semantics — every published-daily id in
+          data/briefs.json becomes eligible. Used for Phase 4 derisking
+          and ad-hoc replays. The catch-up policy + sidecar gate keep
+          the workflow idempotent regardless of what's surfaced here.
+        required: false
+        default: ""
+
+# Repo-wide serialization. Per locked spec — once-daily cadence makes
+# per-id keying unnecessary YAML surface.
+concurrency:
+  group: x-post-main
+  cancel-in-progress: false
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for push-range diff)
+        uses: actions/checkout@v4
+        with:
+          # github.event.before..after may span N commits in a
+          # deferred-push catch-up; need full history to read the
+          # parent state via `git show`.
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package + tweepy
+        run: |
+          pip install -e .
+          pip install "tweepy>=4.14"
+
+      - name: Run X-poster
+        env:
+          # On push: github.event.before/after are the push range.
+          # On workflow_dispatch: github.event.before/after don't
+          # exist (empty); fall back to the dispatch input for BEFORE
+          # and to github.sha (the dispatched commit) for AFTER.
+          GITHUB_EVENT_BEFORE: ${{ github.event.before || github.event.inputs.before_ref }}
+          GITHUB_EVENT_AFTER: ${{ github.event.after || github.sha }}
+          X_CLIENT_ID: ${{ secrets.X_CLIENT_ID }}
+          X_CLIENT_SECRET: ${{ secrets.X_CLIENT_SECRET }}
+          X_REFRESH_TOKEN: ${{ secrets.X_REFRESH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # GH_TOKEN is consumed by `gh secret set` inside
+          # _writeback_refresh_token. MUST be the fine-grained PAT
+          # with `Secrets: Read & write` — the default GITHUB_TOKEN
+          # cannot write secrets.
+          GH_TOKEN: ${{ secrets.GH_PAT_FOR_SECRET_ROTATION }}
+        run: python -m src.post_x
+
+      - name: Commit sidecar
+        # Always run so the sidecar gets recorded even if a downstream
+        # step fails — but the orchestrator's ordering invariant
+        # guarantees the sidecar diff is empty on tweet failure (see
+        # tests/test_post_x.py::test_failed_tweet_leaves_no_sidecar_entry).
+        # NO `continue-on-error` here: a push failure after a successful
+        # tweet is the dangerous case (sidecar lost from the runner →
+        # next dispatch posts a duplicate). The workflow MUST go red
+        # so the operator sees it and applies the documented manual
+        # repair before re-firing.
+        if: always()
+        run: |
+          if [[ -z "$(git status --porcelain data/x-posts.jsonl)" ]]; then
+            echo "No sidecar changes to commit."
+            exit 0
+          fi
+          git config user.email "odd-bot@oddessentials.ai"
+          git config user.name "odd-bot"
+          git add data/x-posts.jsonl
+          git commit -m "chore(x-post): record sidecar [skip ci]"
+          if ! git push; then
+            echo "::error title=Sidecar push failed::A tweet may have already posted to @oddessentials but the sidecar commit did not reach origin/${{ github.ref_name }}. Re-running the workflow without manual repair will publish a duplicate. Inspect the X timeline, manually append the matching row to data/x-posts.jsonl, commit, and push to ${{ github.ref_name }} BEFORE letting the workflow re-fire."
+            exit 1
+          fi

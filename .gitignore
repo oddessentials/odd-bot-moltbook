@@ -3,11 +3,15 @@ agent-brief/node_modules/
 agent-brief/dist/
 agent-brief/.manus-logs/
 
-# Runtime output — never committed, except data/briefs.json (the public-surface
-# source of truth — must be tracked so the auto-publish pipeline can dedupe
-# across runs and a fresh clone knows what's already published).
+# Runtime output — never committed, except the two cross-run audit files
+# below. Both are tracked because each workflow run starts from a fresh
+# checkout and needs to see what's already happened — without that, the
+# auto-publish + x-post idempotency invariants both collapse.
+#   - data/briefs.json  — publish dedupe + public-surface source of truth
+#   - data/x-posts.jsonl — x-post sidecar, gates the no-double-tweet invariant
 data/*
 !data/briefs.json
+!data/x-posts.jsonl
 logs/
 
 # Python
