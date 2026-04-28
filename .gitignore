@@ -1,5 +1,7 @@
-# agent-brief is a separate project with its own .git lifecycle
-agent-brief/
+# agent-brief — SPA source tracked here; heavy/regenerable subdirs ignored.
+agent-brief/node_modules/
+agent-brief/dist/
+agent-brief/.manus-logs/
 
 # Runtime output — never committed, except data/briefs.json (the public-surface
 # source of truth — must be tracked so the auto-publish pipeline can dedupe
