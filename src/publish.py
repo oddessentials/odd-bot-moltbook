@@ -83,6 +83,7 @@ from src.summarize import (
     DATA_DIR,
     DIGESTS_DIR,
     REPO_ROOT,
+    RUNS_PATH,
     _atomic_write_text,
     append_run_record,
     run_daily,
@@ -185,6 +186,106 @@ def _load_briefs() -> list[dict]:
     raw = json.loads(BRIEFS_PATH.read_text())
     _validate_briefs_file(raw)
     return raw
+
+
+# =============================================================================
+# Reconciliation — heal local audit state after a prior run committed but
+# skipped the post-commit finalization steps (e.g., post-commit clean check
+# raised, or machine power loss between commit and flip). Runs BEFORE the
+# pre-flight push and any new synthesis so stale local state never persists
+# across multiple runs.
+# =============================================================================
+
+def _load_publish_record_ids() -> set[str]:
+    """Collect Brief IDs that already have an `action: "publish"` record
+    in `data/runs.jsonl`. Returns an empty set if the file doesn't exist
+    (fresh clone). Tolerates malformed lines — runs.jsonl is append-only
+    audit, not load-bearing for orchestrator decisions.
+    """
+    if not RUNS_PATH.exists():
+        return set()
+    out: set[str] = set()
+    with RUNS_PATH.open() as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("action") == "publish" and rec.get("id"):
+                out.add(rec["id"])
+    return out
+
+
+def _reconcile_finalization(briefs: list[dict]) -> None:
+    """Self-heal local audit state for already-published Briefs.
+
+    For each daily-slugged published entry in `briefs`:
+      - If `data/digests/$id/summary.json` exists with status != "published",
+        flip it to published (atomic write). Validates the on-disk payload
+        against the Brief schema first; malformed → raise (corruption).
+      - If `summary.json` is missing, log INFO and continue (drafts are
+        gitignored; on a fresh clone they won't be present).
+      - If `data/runs.jsonl` lacks an `action: "publish"` record for the
+        id, append a deterministic record (run_id `publish-reconciled-<id>`,
+        ts = `<id>T00:00:00+00:00`, `reconciled: true` marker).
+
+    Idempotent: running on already-reconciled state writes nothing.
+    Skips non-daily entries (e.g., legacy `2026-W18`) — those can't be
+    reconciled (no draft path; pre-existed the daily contract).
+    """
+    publish_ids_recorded = _load_publish_record_ids()
+
+    for entry in briefs:
+        brief_id = entry.get("id", "")
+        if not DAILY_SLUG.match(brief_id):
+            continue
+        if entry.get("status") != "published":
+            continue
+
+        try:
+            d = date.fromisoformat(brief_id)
+        except ValueError:
+            continue
+
+        # On-disk draft status reconciliation.
+        draft_path = _draft_path(d)
+        if draft_path.exists():
+            try:
+                disk_payload = json.loads(draft_path.read_text())
+                Brief(**disk_payload)
+            except Exception as e:
+                # Local audit state is present but corrupt. Refuse to
+                # proceed — operator must investigate before next run.
+                raise RuntimeError(
+                    f"reconcile: malformed draft at {draft_path}: {e}; "
+                    "audit state is corrupt — investigate before next run"
+                )
+            if disk_payload.get("status") != "published":
+                published_payload = {**disk_payload, "status": "published"}
+                _atomic_write_text(
+                    draft_path,
+                    json.dumps(published_payload, indent=2) + "\n",
+                )
+                print(f"reconcile: flipped {brief_id} draft → published on disk")
+        else:
+            # Drafts are gitignored; absence is normal post-clone.
+            print(f"reconcile: {brief_id} draft missing on disk (skipped — INFO)")
+
+        # Run-record reconciliation.
+        if brief_id not in publish_ids_recorded:
+            append_run_record({
+                "run_id": f"publish-reconciled-{brief_id}",
+                "action": "publish",
+                "id": brief_id,
+                "date": brief_id,
+                "ts": f"{brief_id}T00:00:00+00:00",
+                "reconciled": True,
+            })
+            print(f"reconcile: appended publish record for {brief_id}")
+            publish_ids_recorded.add(brief_id)
 
 
 # =============================================================================
@@ -356,6 +457,18 @@ def run_daily_publish(
     started = datetime.now(timezone.utc)
     today = started.date()
 
+    # Load briefs.json once at the top — used for reconciliation, then
+    # re-used for discovery below. The pre-flight push doesn't modify
+    # briefs.json content, so no reload is needed.
+    briefs = _load_briefs()
+
+    # Reconcile finalization gaps from any prior run BEFORE pre-flight
+    # push or new synthesis. If a prior run committed but skipped the
+    # post-commit flip + run-record steps (working-tree-check raised,
+    # power loss between commit and flip, etc.), this self-heals the
+    # local audit state. Idempotent on already-reconciled input.
+    _reconcile_finalization(briefs)
+
     # Pre-flight push — if there are unpushed commits from a prior run,
     # resolve them BEFORE doing any new work. Persistent failure halts
     # the run to avoid stacking new commits behind an unresolved push.
@@ -381,8 +494,7 @@ def run_daily_publish(
             return 0
         print("pre-flight push ok; continuing into daily flow")
 
-    # Discover work.
-    briefs = _load_briefs()
+    # Discover work. `briefs` was already loaded at function entry.
     published_ids = {b.get("id") for b in briefs if b.get("id")}
     candidates = discover_work(today, max_backlog, START_FLOOR, published_ids)
 
