@@ -219,7 +219,7 @@ def _load_publish_record_ids() -> set[str]:
     return out
 
 
-def _reconcile_finalization(briefs: list[dict]) -> None:
+def _reconcile_finalization(briefs: list[dict], dry_run: bool = False) -> None:
     """Self-heal local audit state for already-published Briefs.
 
     For each daily-slugged published entry in `briefs`:
@@ -235,8 +235,13 @@ def _reconcile_finalization(briefs: list[dict]) -> None:
     Idempotent: running on already-reconciled state writes nothing.
     Skips non-daily entries (e.g., legacy `2026-W18`) — those can't be
     reconciled (no draft path; pre-existed the daily contract).
+
+    `dry_run=True` reports what would be reconciled without writing. The
+    malformed-draft check still raises in dry-run mode (corruption is
+    a hard fail regardless of whether we plan to mutate).
     """
     publish_ids_recorded = _load_publish_record_ids()
+    prefix = "reconcile (dry-run): would" if dry_run else "reconcile:"
 
     for entry in briefs:
         brief_id = entry.get("id", "")
@@ -259,32 +264,42 @@ def _reconcile_finalization(briefs: list[dict]) -> None:
             except Exception as e:
                 # Local audit state is present but corrupt. Refuse to
                 # proceed — operator must investigate before next run.
+                # Raised in dry-run mode too: corruption is a hard fail
+                # whether we plan to mutate or just report.
                 raise RuntimeError(
                     f"reconcile: malformed draft at {draft_path}: {e}; "
                     "audit state is corrupt — investigate before next run"
                 )
             if disk_payload.get("status") != "published":
-                published_payload = {**disk_payload, "status": "published"}
-                _atomic_write_text(
-                    draft_path,
-                    json.dumps(published_payload, indent=2) + "\n",
-                )
-                print(f"reconcile: flipped {brief_id} draft → published on disk")
+                if dry_run:
+                    print(f"{prefix} flip {brief_id} draft → published on disk")
+                else:
+                    published_payload = {**disk_payload, "status": "published"}
+                    _atomic_write_text(
+                        draft_path,
+                        json.dumps(published_payload, indent=2) + "\n",
+                    )
+                    print(f"{prefix} flipped {brief_id} draft → published on disk")
         else:
             # Drafts are gitignored; absence is normal post-clone.
             print(f"reconcile: {brief_id} draft missing on disk (skipped — INFO)")
 
         # Run-record reconciliation.
         if brief_id not in publish_ids_recorded:
-            append_run_record({
-                "run_id": f"publish-reconciled-{brief_id}",
-                "action": "publish",
-                "id": brief_id,
-                "date": brief_id,
-                "ts": f"{brief_id}T00:00:00+00:00",
-                "reconciled": True,
-            })
-            print(f"reconcile: appended publish record for {brief_id}")
+            if dry_run:
+                print(f"{prefix} append publish record for {brief_id}")
+            else:
+                append_run_record({
+                    "run_id": f"publish-reconciled-{brief_id}",
+                    "action": "publish",
+                    "id": brief_id,
+                    "date": brief_id,
+                    "ts": f"{brief_id}T00:00:00+00:00",
+                    "reconciled": True,
+                })
+                print(f"{prefix} appended publish record for {brief_id}")
+            # Mark as recorded in the in-memory set so subsequent
+            # iterations don't double-report (idempotent across the loop).
             publish_ids_recorded.add(brief_id)
 
 
@@ -457,10 +472,39 @@ def run_daily_publish(
     started = datetime.now(timezone.utc)
     today = started.date()
 
-    # Load briefs.json once at the top — used for reconciliation, then
-    # re-used for discovery below. The pre-flight push doesn't modify
-    # briefs.json content, so no reload is needed.
+    # Load briefs.json once at the top — used for reconciliation and
+    # discovery. The pre-flight push doesn't modify briefs.json content,
+    # so no reload is needed.
     briefs = _load_briefs()
+
+    # --- Dry-run path (READ-ONLY) -------------------------------------------
+    # Reports what reconciliation, pre-flight push, and discovery WOULD do
+    # without mutating local audit state, the remote, or briefs.json.
+    # Malformed-draft corruption still raises (hard fail regardless).
+    if dry_run:
+        print(f"--- dry-run report (today={today.isoformat()}, max_backlog={max_backlog}) ---")
+        _reconcile_finalization(briefs, dry_run=True)
+        ahead = _commits_ahead()
+        if ahead > 0:
+            print(f"pre-flight (dry-run): {ahead} commit(s) ahead of remote; would attempt push")
+        else:
+            print("pre-flight (dry-run): clean (0 commits ahead)")
+        published_ids = {b.get("id") for b in briefs if b.get("id")}
+        candidates = discover_work(today, max_backlog, START_FLOOR, published_ids)
+        if not candidates:
+            print(f"discovery (dry-run): no candidates (already published through {today})")
+            return 0
+        print(f"discovery (dry-run): candidates ({len(candidates)}): {[d.isoformat() for d in candidates]}")
+        for d in candidates:
+            if _draft_path(d).exists():
+                print(f"  {d}: would orphan-promote existing draft")
+            elif d == today:
+                print(f"  {d}: would fetch live + synthesize (today)")
+            else:
+                print(f"  {d}: would skip (no draft; live-API cannot backfill)")
+        return 0
+
+    # --- Real (mutating) flow -----------------------------------------------
 
     # Reconcile finalization gaps from any prior run BEFORE pre-flight
     # push or new synthesis. If a prior run committed but skipped the
@@ -511,16 +555,6 @@ def run_daily_publish(
         return 0
 
     print(f"candidates ({len(candidates)}): {[d.isoformat() for d in candidates]}")
-
-    if dry_run:
-        for d in candidates:
-            if _draft_path(d).exists():
-                print(f"  {d}: would orphan-promote existing draft")
-            elif d == today:
-                print(f"  {d}: would fetch live + synthesize (today)")
-            else:
-                print(f"  {d}: would skip (no draft; live-API cannot backfill)")
-        return 0
 
     # Snapshot the deployed-state briefs for revert if the commit pipeline
     # fails. "Deployed state" = whatever briefs.json currently holds, which
