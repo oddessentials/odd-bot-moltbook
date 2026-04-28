@@ -36,7 +36,7 @@ Flow per run:
         e. git push. Failure → record deferred state, exit 0.
 
   6. Always: write data/.last-run-state.json (telemetry mirror of
-     `git rev-list @..@{u} --count`).
+     `git rev-list @{u}..@ --count`, the AHEAD-of-remote count).
 
 Invariants (asserted at runtime):
   - live_fetch_invocations <= 1 per run.
