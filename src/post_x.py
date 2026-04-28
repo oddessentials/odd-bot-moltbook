@@ -117,6 +117,7 @@ def run_post_x(
     tweet_poster: Callable[[str], str],
     url_prober: Callable[[str], bool],
     article_url_template: str = "https://news.oddessentials.ai/brief/{id}",
+    log: Callable[[str], None] = lambda _msg: None,
 ) -> int:
     """End-to-end X-post orchestrator.
 
@@ -124,15 +125,28 @@ def run_post_x(
     Propagates exceptions from `tweet_poster`. The sidecar is never
     written before a successful tweet — failure leaves no audit row,
     matching the "manual repair only" invariant in the locked spec.
+
+    `log(msg)` is called at every public step transition with a short,
+    deterministic, non-secret message. `main()` wires it to a flushing
+    print so workflow runs are self-explanatory in GH Actions logs;
+    the unit suite leaves the default no-op so test output stays clean.
     """
     eligible = discover_new_published_daily_ids(before_briefs, after_briefs)
     already_posted = _already_posted_ids(sidecar_path)
+    log(
+        f"[x-post] discovery: {len(eligible)} eligible daily id(s) "
+        f"({eligible}); sidecar already_posted={len(already_posted)}"
+    )
     post_id, skipped = select_post_target(eligible, already_posted)
     if post_id is None:
         # Replay: latest already tweeted (or no eligibles at all).
         # Complete audit state by writing any missing skipped_catchup
         # rows, then exit without a tweet.
         if skipped:
+            log(
+                f"[x-post] no-op: latest already in sidecar; completing "
+                f"audit with {len(skipped)} skipped_catchup row(s)"
+            )
             now = datetime.now(timezone.utc).isoformat()
             for sk_id in skipped:
                 _append_sidecar(sidecar_path, {
@@ -140,12 +154,16 @@ def run_post_x(
                     "status": "skipped_catchup",
                     "skipped_at": now,
                 })
+        else:
+            log("[x-post] no-op: nothing to do")
         return 0
 
+    log(f"[x-post] select: post_id={post_id}, skipped_catchup={skipped}")
     url = article_url_template.format(id=post_id)
     if not url_prober(url):
         # Pages deploy not live at the deep-link yet; abort with no
         # tweet and no sidecar mutation. Next run retries.
+        log("[x-post] abort: asset bundle probe budget exhausted; no tweet, no sidecar mutation")
         return 1
 
     brief = next((b for b in after_briefs if b.get("id") == post_id), None)
@@ -156,9 +174,11 @@ def run_post_x(
 
     joke = joke_synthesizer(brief)
     text = f"{joke}\n{url}"
+    log(f"[x-post] post: text length={len(text)} chars")
     # Ordering invariant: tweet_poster runs BEFORE any sidecar write.
     # If it raises, propagation leaves the sidecar untouched.
     tweet_id = tweet_poster(text)
+    log(f"[x-post] post: ok (tweet_id={tweet_id})")
 
     now = datetime.now(timezone.utc).isoformat()
     _append_sidecar(sidecar_path, {
@@ -173,6 +193,7 @@ def run_post_x(
             "status": "skipped_catchup",
             "skipped_at": now,
         })
+    log(f"[x-post] sidecar: appended 1 posted row + {len(skipped)} skipped_catchup row(s)")
     return 0
 
 
@@ -276,21 +297,17 @@ def _probe_asset_bundle(
 ) -> bool:
     """HEAD-probe the content-hashed bundle URL until 200 or budget exhausted.
 
-    The new bundle filename only resolves on the live site after the
-    Pages deploy completes. 5min total budget (10 * 30s) absorbs
-    typical Pages propagation latency without unbounded waiting.
-
-    Sends an explicit `User-Agent`. GitHub Pages' upstream CDN returns
-    HTTP 403 to the default Python urllib UA (`Python-urllib/3.x`),
-    which the previous version of this function read as a hard
-    server error and returned False on — dispatching the X-poster
-    after a clean deploy still failed with no surfaced reason.
+    Logs each attempt's HTTP status category (or error class) so workflow
+    runs are diagnosable from the GH Actions log alone. Never logs
+    response bodies, secret-bearing headers, or full URLs beyond the
+    asset path passed in by the caller.
     """
     import time
     import urllib.error
     import urllib.request
 
     for attempt in range(max_retries):
+        attempt_label = f"attempt {attempt + 1}/{max_retries}"
         try:
             req = urllib.request.Request(
                 asset_url,
@@ -298,16 +315,32 @@ def _probe_asset_bundle(
                 headers={"User-Agent": _PROBE_USER_AGENT},
             )
             with urllib.request.urlopen(req, timeout=15) as resp:
+                print(
+                    f"[x-post] probe {attempt_label}: HTTP {resp.status}",
+                    flush=True,
+                )
                 if 200 <= resp.status < 300:
                     return True
         except urllib.error.HTTPError as e:
+            print(
+                f"[x-post] probe {attempt_label}: HTTPError {e.code}",
+                flush=True,
+            )
             if e.code != 404:
                 # Surfaced server error — abort, don't burn retries.
                 return False
-        except urllib.error.URLError:
-            pass  # transient network — retry
+        except urllib.error.URLError as e:
+            print(
+                f"[x-post] probe {attempt_label}: URLError "
+                f"({type(e).__name__})",
+                flush=True,
+            )
         if attempt < max_retries - 1:
             time.sleep(backoff_seconds)
+    print(
+        f"[x-post] probe: budget exhausted after {max_retries} attempts",
+        flush=True,
+    )
     return False
 
 
@@ -401,9 +434,17 @@ def main() -> int:
     """CLI entry point invoked by `.github/workflows/x-post.yml`.
 
     Reads env (creds, GitHub event SHAs, repo paths), wires the real
-    callables into `run_post_x`, returns its exit code.
+    callables into `run_post_x`, returns its exit code. Emits a
+    deterministic, non-secret stdout log of every step transition so
+    GH Actions runs are diagnosable without re-instrumenting.
     """
     import os
+
+    def _log(msg: str) -> None:
+        print(msg, flush=True)
+
+    run_id = os.environ.get("GITHUB_RUN_ID", "local")
+    _log(f"[x-post] starting workflow run {run_id}")
 
     repo_root = Path(os.environ.get("GITHUB_WORKSPACE", "."))
     sidecar_path = repo_root / "data" / "x-posts.jsonl"
@@ -424,12 +465,15 @@ def main() -> int:
         # Initial push to main, or workflow_dispatch — no parent state.
         # Discovery surfaces every published-daily id; sidecar gate
         # keeps it idempotent.
+        _log("[x-post] before_sha empty/zero — initial-push semantics; before_briefs=[]")
         before_briefs: list[dict] = []
     else:
+        _log(f"[x-post] reading parent briefs.json at before_sha={before_sha[:7]}")
         before_briefs = _read_briefs_at_ref(before_sha, "data/briefs.json")
 
     bundle_path = _extract_bundle_path(index_html_path)
     bundle_url = f"{X_DOMAIN}{bundle_path}"
+    _log(f"[x-post] asset bundle probe target: {bundle_url}")
 
     def url_prober(_article_url: str) -> bool:
         # Probe the content-hashed bundle, NOT the article deep-link.
@@ -460,18 +504,23 @@ def main() -> int:
 
     def tweet_poster(text: str) -> str:
         if cached_access_token["value"] is None:
+            _log("[x-post] refresh: requesting new access token")
             response = _refresh_access_token(
                 x_client_id,
                 x_client_secret,
                 x_refresh_token,
             )
             cached_access_token["value"] = response["access_token"]
+            new_refresh = response.get("refresh_token")
+            rotated = bool(new_refresh and new_refresh != x_refresh_token)
+            _log(f"[x-post] refresh: ok (rotation={'yes' if rotated else 'no'})")
             # Writeback BEFORE posting iff X rotated. If writeback
             # raises (PAT issue, rate limit), the tweet never sends —
             # no public side effect, recoverable by fixing the PAT.
-            new_refresh = response.get("refresh_token")
-            if new_refresh and new_refresh != x_refresh_token:
+            if rotated:
+                _log("[x-post] writeback: gh secret set X_REFRESH_TOKEN")
                 _writeback_refresh_token(new_refresh)
+                _log("[x-post] writeback: ok")
         return _post_tweet(text, cached_access_token["value"])
 
     def joke_synthesizer(brief: dict) -> str:
@@ -484,6 +533,7 @@ def main() -> int:
         joke_synthesizer=joke_synthesizer,
         tweet_poster=tweet_poster,
         url_prober=url_prober,
+        log=_log,
     )
 
 
