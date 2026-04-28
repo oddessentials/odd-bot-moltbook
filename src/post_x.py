@@ -262,6 +262,12 @@ def _extract_bundle_path(index_html_path: Path) -> str:
     return m.group(1)
 
 
+_PROBE_USER_AGENT = (
+    "odd-bot-moltbook/0.1 x-post-probe "
+    "(+https://github.com/oddessentials/odd-bot-moltbook)"
+)
+
+
 def _probe_asset_bundle(
     asset_url: str,
     *,
@@ -273,6 +279,12 @@ def _probe_asset_bundle(
     The new bundle filename only resolves on the live site after the
     Pages deploy completes. 5min total budget (10 * 30s) absorbs
     typical Pages propagation latency without unbounded waiting.
+
+    Sends an explicit `User-Agent`. GitHub Pages' upstream CDN returns
+    HTTP 403 to the default Python urllib UA (`Python-urllib/3.x`),
+    which the previous version of this function read as a hard
+    server error and returned False on — dispatching the X-poster
+    after a clean deploy still failed with no surfaced reason.
     """
     import time
     import urllib.error
@@ -280,7 +292,11 @@ def _probe_asset_bundle(
 
     for attempt in range(max_retries):
         try:
-            req = urllib.request.Request(asset_url, method="HEAD")
+            req = urllib.request.Request(
+                asset_url,
+                method="HEAD",
+                headers={"User-Agent": _PROBE_USER_AGENT},
+            )
             with urllib.request.urlopen(req, timeout=15) as resp:
                 if 200 <= resp.status < 300:
                     return True
