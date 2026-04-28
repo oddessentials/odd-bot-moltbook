@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.oddbot.moltbook.daily</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/macmini1/repos/odd-bot-moltbook/scripts/run-daily-publish.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/macmini1/repos/odd-bot-moltbook</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>5</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- Recover from missed 05:00 windows (machine off/asleep). The
+         orchestrator's idempotency check (data/briefs.json's published
+         id set) prevents double-publishes; the fcntl lock at
+         data/.run.lock prevents overlap with a parallel manual run. -->
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/macmini1/repos/odd-bot-moltbook/logs/moltbook-daily.launchd.out</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/macmini1/repos/odd-bot-moltbook/logs/moltbook-daily.launchd.err</string>
+</dict>
+</plist>
