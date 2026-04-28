@@ -27,6 +27,15 @@ concurrency:
   group: x-post-main
   cancel-in-progress: false
 
+# The "Commit sidecar" step pushes data/x-posts.jsonl back to the
+# branch. The default GITHUB_TOKEN is read-only for contents; without
+# this grant the push fails with 403 ("Permission to <repo> denied to
+# github-actions[bot]"). Identified during the post-merge dispatch on
+# 2026-04-28 — the annotation correctly fired because the workflow
+# can't distinguish a transient push failure from a permission one.
+permissions:
+  contents: write
+
 jobs:
   post:
     runs-on: ubuntu-latest
