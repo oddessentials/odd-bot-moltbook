@@ -46,6 +46,19 @@ export HTTPS_PROXY="http://127.0.0.1:8080"
 export HTTP_PROXY="http://127.0.0.1:8080"
 export NO_PROXY="github.com,api.github.com,*.github.com"
 
+# mitmproxy substitutes the upstream cert with one signed by its CA;
+# Python's urllib must verify against a trust store that includes that
+# CA. launchd's stripped env has no SSL_CERT_FILE set, so Python falls
+# back to a default that doesn't include mitmproxy's CA — point it at
+# the bundle directly. (REQUESTS_CA_BUNDLE for any lib that uses requests.)
+# All of this script's HTTPS egress is through the proxy except git, and
+# git's cert config is independent of these env vars.
+MITM_CA="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"
+if [ -f "$MITM_CA" ]; then
+    export SSL_CERT_FILE="$MITM_CA"
+    export REQUESTS_CA_BUNDLE="$MITM_CA"
+fi
+
 LOG_DIR="$REPO_ROOT/logs"
 mkdir -p "$LOG_DIR"
 exec >>"$LOG_DIR/moltbook-daily.log" 2>&1
