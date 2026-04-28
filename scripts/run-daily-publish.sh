@@ -20,6 +20,24 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# launchd's default PATH excludes nvm-managed binaries. The orchestrator's
+# `pnpm --dir agent-brief build` subprocess inherits this script's PATH,
+# so resolve pnpm/node here before invoking Python. Source nvm.sh if
+# present; fall back to the highest installed nvm node version.
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$NVM_DIR/nvm.sh" >/dev/null 2>&1
+fi
+if ! command -v pnpm >/dev/null 2>&1; then
+    NODE_BIN="$(ls -d "$NVM_DIR/versions/node"/*/bin 2>/dev/null | sort -V | tail -1)"
+    [ -n "$NODE_BIN" ] && export PATH="$NODE_BIN:$PATH"
+fi
+if ! command -v pnpm >/dev/null 2>&1; then
+    echo "FATAL: pnpm not on PATH (checked nvm default + latest install)" >&2
+    exit 1
+fi
+
 # Route Anthropic + Moltbook traffic through the odd-ai-observatory
 # mitmproxy so daily synthesis is visible in observability. NO_PROXY
 # excludes github.com so `git push` isn't subject to mitmproxy's TLS
