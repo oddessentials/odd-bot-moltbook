@@ -42,8 +42,19 @@ from .schema import CastConfig
 from .tts import generate_tts
 
 
+class SegmentValidationError(RuntimeError):
+    """Raised by validate_segment_outputs when an objective gate fails.
+
+    Typed so the retry wrapper and the process_segment idempotency-skip
+    path can distinguish a validation failure (segment artifacts on disk
+    are bad and need to be re-rendered) from a transient error
+    (network/HTTP/queue glitch where the existing artifacts are still
+    fine to reuse).
+    """
+
+
 def validate_segment_outputs(audio_path: Path, clip_path: Path) -> None:
-    """Apply the canary gates. Raises RuntimeError on any failure.
+    """Apply the canary gates. Raises SegmentValidationError on any failure.
 
     Gates (objective):
       - TTS file exists and is ≥ TTS_MIN_BYTES.
@@ -54,47 +65,47 @@ def validate_segment_outputs(audio_path: Path, clip_path: Path) -> None:
       - Clip duration matches TTS duration ±CLIP_AUDIO_DURATION_TOLERANCE_SEC.
     """
     if not audio_path.exists():
-        raise RuntimeError(f"audio missing: {audio_path}")
+        raise SegmentValidationError(f"audio missing: {audio_path}")
     audio_bytes = audio_path.stat().st_size
     if audio_bytes < TTS_MIN_BYTES:
-        raise RuntimeError(f"audio too small ({audio_bytes} bytes): {audio_path}")
+        raise SegmentValidationError(f"audio too small ({audio_bytes} bytes): {audio_path}")
 
     audio_meta = ffprobe_streams(audio_path)
     audio_duration_sec = float(audio_meta["format"]["duration"])
     if not TTS_MIN_DURATION_SEC <= audio_duration_sec <= TTS_MAX_DURATION_SEC:
-        raise RuntimeError(
+        raise SegmentValidationError(
             f"audio duration {audio_duration_sec:.2f}s out of bounds "
             f"[{TTS_MIN_DURATION_SEC}, {TTS_MAX_DURATION_SEC}]"
         )
 
     mean_db = ffmpeg_mean_volume_db(audio_path)
     if mean_db < TTS_MIN_MEAN_VOLUME_DB:
-        raise RuntimeError(
+        raise SegmentValidationError(
             f"audio mean_volume {mean_db:.1f} dB below silence threshold "
             f"{TTS_MIN_MEAN_VOLUME_DB} dB — TTS likely produced silence"
         )
 
     if not clip_path.exists():
-        raise RuntimeError(f"clip missing: {clip_path}")
+        raise SegmentValidationError(f"clip missing: {clip_path}")
     clip_meta = ffprobe_streams(clip_path)
     streams = clip_meta.get("streams", [])
     video_streams = [s for s in streams if s.get("codec_type") == "video"]
     audio_streams = [s for s in streams if s.get("codec_type") == "audio"]
     if not video_streams:
-        raise RuntimeError(f"clip has no video stream: {clip_path}")
+        raise SegmentValidationError(f"clip has no video stream: {clip_path}")
     if not audio_streams:
-        raise RuntimeError(f"clip has no audio stream: {clip_path}")
+        raise SegmentValidationError(f"clip has no audio stream: {clip_path}")
 
     v = video_streams[0]
     width = int(v["width"])
     height = int(v["height"])
     if height != EXPECTED_VIDEO_HEIGHT:
-        raise RuntimeError(
+        raise SegmentValidationError(
             f"clip height {height} != expected {EXPECTED_VIDEO_HEIGHT}: {clip_path}"
         )
     aspect = width / height
     if abs(aspect - EXPECTED_ASPECT_RATIO) / EXPECTED_ASPECT_RATIO > EXPECTED_ASPECT_RATIO_TOLERANCE:
-        raise RuntimeError(
+        raise SegmentValidationError(
             f"clip aspect {aspect:.4f} not 16:9 (within {EXPECTED_ASPECT_RATIO_TOLERANCE * 100:.0f}%): "
             f"{width}x{height}"
         )
@@ -102,7 +113,7 @@ def validate_segment_outputs(audio_path: Path, clip_path: Path) -> None:
     clip_duration_sec = float(clip_meta["format"]["duration"])
     delta = abs(clip_duration_sec - audio_duration_sec)
     if delta > CLIP_AUDIO_DURATION_TOLERANCE_SEC:
-        raise RuntimeError(
+        raise SegmentValidationError(
             f"clip duration {clip_duration_sec:.2f}s vs audio {audio_duration_sec:.2f}s "
             f"differs by {delta:.2f}s > tolerance {CLIP_AUDIO_DURATION_TOLERANCE_SEC}s"
         )
@@ -140,8 +151,27 @@ def process_segment(
         and audio_path.exists()
         and clip_path.exists()
     ):
-        print(f"  seg{idx:02d}: already complete, skipping")
-        return
+        # Phase 0b precedent set audio_status / clip_status to "complete"
+        # BEFORE running the objective gates, so a previously-failed
+        # validation could leave both flags lying. Re-validate before
+        # honoring the skip — if the gate raises, we fall through and
+        # re-render rather than registering a fake success.
+        try:
+            validate_segment_outputs(audio_path, clip_path)
+        except SegmentValidationError as e:
+            print(
+                f"  seg{idx:02d}: previously-complete segment failed re-validation "
+                f"({e}); resetting status and re-rendering."
+            )
+            update_segment_state(
+                manifest_path,
+                idx,
+                audio_status="pending",
+                clip_status="pending",
+            )
+        else:
+            print(f"  seg{idx:02d}: already complete, skipping")
+            return
 
     seg["attempts"] = int(seg.get("attempts", 0)) + 1
     update_segment_state(manifest_path, idx, attempts=seg["attempts"])
