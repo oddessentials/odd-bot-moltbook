@@ -5,7 +5,7 @@
  *   1. "Today's Brief" hero card (oversized headline, dek, items preview, CTA)
  *   2. Recent briefs (3-up card grid)
  *   3. Latest episode (inline YouTube embed + description)
- *   4. Quiet email-signup strip (placeholder; non-functional, shows toast)
+ *   4. Follow-on-X strip (CTA card pointing to @oddessentials)
  *
  * One mascot moment: small waving shrimp tucked into the hero corner on desktop.
  */
@@ -13,8 +13,6 @@
 import { Link } from "wouter";
 import { ArrowRight, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
 
 import SiteLayout from "@/components/SiteLayout";
 import BriefCard from "@/components/BriefCard";
@@ -22,7 +20,6 @@ import { formatLongDate, type Brief } from "@/data/content";
 import { useBriefs } from "@/hooks/useBriefs";
 import { useEpisodes } from "@/hooks/useEpisodes";
 import { BRAND } from "@/lib/brand";
-import { useState } from "react";
 
 function HeroBrief({ briefs }: { briefs: Brief[] }) {
   const today = briefs[0];
@@ -201,8 +198,7 @@ function LatestEpisode() {
   );
 }
 
-function SignupStrip() {
-  const [email, setEmail] = useState("");
+function FollowStrip() {
   return (
     <section className="container py-16 md:py-20">
       <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-8 md:p-12">
@@ -212,44 +208,42 @@ function SignupStrip() {
         />
         <div className="relative grid gap-6 md:grid-cols-[1.2fr_1fr] md:items-center">
           <div>
-            <p className="kicker-coral">Get the brief by email</p>
+            <p className="kicker-coral">Follow along on X</p>
             <h3
               className="mt-2 font-display text-2xl font-semibold leading-tight tracking-tight md:text-3xl"
               style={{ fontVariationSettings: '"opsz" 144' }}
             >
-              One short email each weekday. No fluff, no fishy stuff.
+              One short post each weekday. No fluff, no fishy stuff.
             </h3>
             <p className="mt-3 text-sm text-muted-foreground">
-              Subscribe and the next morning&rsquo;s brief lands in your inbox before your second coffee.
+              Follow @oddessentials on X for daily brief drops, podcast announcements, and the occasional crustacean joke.
             </p>
           </div>
-          <form
-            className="flex flex-col gap-3 sm:flex-row"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!email.trim()) return;
-              toast.success("You're on the list", {
-                description: "Email signup is a placeholder for now — we'll wire this up to the real list shortly.",
-              });
-              setEmail("");
-            }}
-          >
-            <Input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@yourdomain.com"
-              className="h-12 rounded-full bg-background px-5 text-base"
-            />
+          <div className="flex md:justify-end">
             <Button
-              type="submit"
+              asChild
               size="lg"
               className="h-12 rounded-full bg-foreground px-6 text-background hover:bg-foreground/90"
             >
-              Subscribe
+              <a
+                href="https://x.com/oddessentials"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Follow @oddessentials on X (opens in new tab)"
+              >
+                {/* Official X mark — fills with currentColor so it inverts cleanly across light/dark themes. */}
+                <svg
+                  aria-hidden
+                  viewBox="0 0 24 24"
+                  className="h-4 w-4"
+                  fill="currentColor"
+                >
+                  <path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z" />
+                </svg>
+                Follow @oddessentials
+              </a>
             </Button>
-          </form>
+          </div>
         </div>
       </div>
     </section>
@@ -263,7 +257,7 @@ export default function Home() {
       <HeroBrief briefs={briefs} />
       <RecentBriefs briefs={briefs} />
       <LatestEpisode />
-      <SignupStrip />
+      <FollowStrip />
     </SiteLayout>
   );
 }
