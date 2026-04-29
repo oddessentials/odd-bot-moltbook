@@ -36,6 +36,16 @@
 
 set -euo pipefail
 
+# ─── Operational knobs ─────────────────────────────────────────────────────
+# Minimum days between consecutive episode publishes. Cadence guard
+# REFUSES if `data/episodes.json`'s most-recent entry is younger than
+# this. 6 (not 7) tolerates clock drift across week boundaries: last
+# Sunday published at 12:00, this Sunday cron fires at 09:00 → calendar
+# diff = 6 → PROCEED. Tuesday reboot after Sunday publish → diff = 2
+# → REFUSE. Operator escape hatch: set FORCE=1 to bypass.
+MIN_DAYS=6
+# ───────────────────────────────────────────────────────────────────────────
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
@@ -147,6 +157,61 @@ if [ "$AHEAD" -gt 0 ]; then
     echo "  cadence picks up steady-state."
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh finished (pre-flight push only)"
     exit 0
+fi
+
+# Cadence guard. After pre-flight (which exits the wrapper if it had to
+# push), this is the cheap-Python check that protects against
+# RunAtLoad-induced over-firing on Mac mini reboots between Sundays.
+# Reads the most-recent entry by episodeNo from data/episodes.json,
+# compares its `date` to today. PROCEED if >= MIN_DAYS old or no
+# prior episode; REFUSE otherwise. Malformed episodes.json or bad
+# date → Python raises → bash exits 1 (operator investigates).
+CADENCE_RESULT=$(MIN_DAYS="$MIN_DAYS" "$REPO_ROOT/.venv/bin/python" -c '
+import json, os, sys
+from datetime import date
+from pathlib import Path
+
+min_days = int(os.environ["MIN_DAYS"])
+ep_path = Path("data/episodes.json")
+if not ep_path.exists():
+    print("PROCEED:no_episodes_json"); sys.exit(0)
+entries = json.loads(ep_path.read_text())
+if not entries:
+    print("PROCEED:empty_episodes"); sys.exit(0)
+latest = max(entries, key=lambda e: e.get("episodeNo", 0))
+# Missing / empty / malformed date is a corruption signal, not a
+# "permissively proceed" case — letting the guard PROCEED on a bad
+# entry would re-introduce the over-fire hazard the guard exists to
+# prevent. date.fromisoformat raises on None / "" / unparseable
+# strings; bash sees no PROCEED|REFUSE prefix on stdout and exits 1
+# via the wildcard case below.
+latest_date_str = latest.get("date")
+days_since = (date.today() - date.fromisoformat(latest_date_str)).days
+verb = "PROCEED" if days_since >= min_days else "REFUSE"
+latest_id = latest.get("id") or "unknown"
+print(f"{verb}:{days_since}:{latest_id}:{latest_date_str}")
+')
+
+if [ "${FORCE:-}" = "1" ]; then
+    echo "  cadence guard: FORCE=1 — bypassing ($CADENCE_RESULT)"
+else
+    case "$CADENCE_RESULT" in
+        PROCEED:*)
+            echo "  cadence guard: $CADENCE_RESULT"
+            ;;
+        REFUSE:*)
+            echo "  cadence guard: $CADENCE_RESULT (need >= $MIN_DAYS days since latest)."
+            echo "  no spend, no publish. Next reboot or scheduled fire will retry;"
+            echo "  the next eligible window opens $MIN_DAYS days after the latest publish."
+            echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh finished (cadence guard)"
+            exit 0
+            ;;
+        *)
+            echo "  cadence guard: unexpected output ($CADENCE_RESULT) — likely malformed"
+            echo "  data/episodes.json. Refusing to proceed; operator: investigate."
+            exit 1
+            ;;
+    esac
 fi
 
 NEXT_NO=$("$REPO_ROOT/.venv/bin/python" -c \
