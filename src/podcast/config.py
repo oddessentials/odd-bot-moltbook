@@ -47,6 +47,10 @@ EPISODE_DURATION_MIN_SEC = 60.0
 EPISODE_DURATION_MAX_SEC = 360.0
 STITCH_DURATION_TOLERANCE_SEC = 2.0
 
+# Worst observed Phase 0b clip render: 268s. 1800s = 30 min gives ~6.7×
+# headroom over the worst case before declaring the generation hung.
+HEDRA_POLL_TIMEOUT_SEC = 1800.0
+
 YOUTUBE_CATEGORY_ID = "28"           # Science & Technology
 YOUTUBE_DEFAULT_LANGUAGE = "en"
 YOUTUBE_DEFAULT_TAGS = ["AI agents", "Moltbook", "Odd Essentials"]

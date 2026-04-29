@@ -16,6 +16,7 @@ from .config import (
     ASPECT_RATIO,
     HEDRA_API_BASE,
     HEDRA_MODEL_ID,
+    HEDRA_POLL_TIMEOUT_SEC,
     RESOLUTION,
 )
 
@@ -68,12 +69,22 @@ def poll_hedra_clip(
     gen_id: str,
     *,
     poll_interval_sec: float = 5.0,
+    timeout_sec: float = HEDRA_POLL_TIMEOUT_SEC,
 ) -> tuple[str, str]:
     """Block until the Hedra generation is complete or errored.
 
-    Returns (clip_asset_id, download_url). Raises RuntimeError on error.
+    Returns (clip_asset_id, download_url). Raises RuntimeError on Hedra-side
+    error and TimeoutError if the generation has not reached a terminal
+    status within `timeout_sec` seconds (default 30 min — well above the
+    268s worst case observed in Phase 0b).
     """
+    deadline = time.monotonic() + timeout_sec
     while True:
+        if time.monotonic() > deadline:
+            raise TimeoutError(
+                f"Hedra generation {gen_id} did not reach a terminal status "
+                f"within {timeout_sec:.0f}s"
+            )
         st = s.get(f"{HEDRA_API_BASE}/generations/{gen_id}/status", timeout=30)
         st.raise_for_status()
         data = st.json()
