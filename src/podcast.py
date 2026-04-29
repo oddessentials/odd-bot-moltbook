@@ -476,6 +476,7 @@ def write_initial_manifest(
     corpus: list[BriefSummary],
     cast: CastConfig,
     script: EpisodeScript,
+    overwrite: bool = False,
 ) -> Path:
     """Write the Phase 0b initial manifest after script generation succeeds.
 
@@ -483,7 +484,18 @@ def write_initial_manifest(
     manifest in-place via atomic rewrites. The manifest is the canonical
     state machine for resume — everything outside `data/episodes/<id>/`
     derives from it.
+
+    Refuses to clobber an existing manifest unless overwrite=True. This is
+    the safe default: silently overwriting would erase per-segment pipeline
+    state (audio_path, clip_asset_id, attempts) that downstream phases write
+    after script generation.
     """
+    manifest_path = episode_dir(episode_id) / "manifest.json"
+    if manifest_path.exists() and not overwrite:
+        raise FileExistsError(
+            f"manifest already exists at {manifest_path}. Pass overwrite=True "
+            "to replace (drops all per-segment pipeline state)."
+        )
     manifest = {
         "id": episode_id,
         "episode_no": episode_no,
@@ -539,11 +551,21 @@ def cmd_generate_script(args: argparse.Namespace) -> int:
     if not corpus:
         print("no eligible corpus — refusing to generate", file=sys.stderr)
         return 2
+
+    episode_id = args.episode_id
+    manifest_path = episode_dir(episode_id) / "manifest.json"
+    if manifest_path.exists() and not args.force:
+        print(
+            f"manifest already exists at {manifest_path}. "
+            "Pass --force to overwrite (drops all per-segment pipeline state).",
+            file=sys.stderr,
+        )
+        return 2
+
     cast = load_cast()
     print(f"Generating script (model={SCRIPT_MODEL}) over {len(corpus)} brief(s)...")
     script = generate_episode_script(corpus, cast)
 
-    episode_id = args.episode_id
     episode_no = args.episode_no or derive_episode_no()
     run_date = args.run_date or _date.today().isoformat()
     manifest_path = write_initial_manifest(
@@ -553,6 +575,7 @@ def cmd_generate_script(args: argparse.Namespace) -> int:
         corpus=corpus,
         cast=cast,
         script=script,
+        overwrite=args.force,
     )
     print(f"Script generated: {len(script.segments)} segments, title={script.title!r}")
     print(f"Hosts: {derive_hosts(script, cast)}")
@@ -573,6 +596,11 @@ def main(argv: list[str] | None = None) -> int:
     p_gen.add_argument("--episode-id", default="ep-001")
     p_gen.add_argument("--episode-no", type=int, default=None)
     p_gen.add_argument("--run-date", default=None, help="ISO date; defaults to today.")
+    p_gen.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing manifest. Drops all per-segment pipeline state.",
+    )
 
     args = parser.parse_args(argv)
     if args.cmd == "show-corpus":
