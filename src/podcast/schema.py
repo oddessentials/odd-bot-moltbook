@@ -62,9 +62,17 @@ class EpisodeRecord(BaseModel):
     """Engine output mirroring the SPA Episode TS interface at
     agent-brief/client/src/data/content.ts:61-70. Phase 0b validates the
     shape and stores it in the gitignored manifest only — no public
-    episodes.json write until Phase 2."""
+    episodes.json write until Phase 2.
 
-    id: str
+    `id` is pattern-constrained to slug-safe characters: it appears in
+    the canonical URL, in the OG meta tags, in data/episodes.json, and
+    will appear in the Phase 3 X-post. A non-slug id (`..`, embedded
+    quotes, spaces, html-significant characters) would let an attacker-
+    crafted record either escape the OG tag's `content="..."` attribute
+    or construct a path-traversal canonical URL. The constraint enforces
+    the safe subset at the single point every consumer goes through."""
+
+    id: str = Field(..., min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
     episodeNo: int = Field(..., ge=1)
     title: str = Field(..., min_length=1, max_length=80)
     date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")

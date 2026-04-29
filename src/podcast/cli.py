@@ -25,7 +25,9 @@ from .config import (
     YOUTUBE_DISCLAIMER,
 )
 from .corpus import load_eligible_corpus, summarize_corpus
+from .episodes import cmd_publish
 from .hedra import hedra_session
+from .og import cmd_og
 from .keys import (
     load_elevenlabs_key,
     load_hedra_key,
@@ -38,6 +40,7 @@ from .manifest import (
     derive_episode_no,
     derive_hosts,
     episode_dir,  # noqa: F401  -- used by cmd_generate_script via --force cleanup
+    is_at_or_past,
     manifest_path_for,
     read_manifest,
     resolve_inside_episode,
@@ -184,11 +187,10 @@ def cmd_stitch(args: argparse.Namespace) -> int:
         return 2
     manifest = read_manifest(mpath)
 
-    completed_states = ("stitched", "video_uploaded", "uploaded")
     stitched_path_str = manifest.get("stitched_path")
     if (
         not args.force
-        and manifest.get("validation_status") in completed_states
+        and is_at_or_past(manifest.get("validation_status"), "stitched")
         and stitched_path_str
     ):
         try:
@@ -301,8 +303,8 @@ def cmd_upload(args: argparse.Namespace) -> int:
                 manifest.pop("youtube_upload_session_uri", None)
                 manifest.pop("youtube_upload_total_bytes", None)
                 manifest["youtube_id"] = video_id
-                manifest["validation_status"] = "video_uploaded"
                 write_manifest(mpath, manifest)
+                advance_validation_status(mpath, "video_uploaded")
             except Exception as e:
                 print(
                     f"  resume failed ({e}); falling back to fresh upload.",
@@ -429,7 +431,21 @@ def cmd_run(args: argparse.Namespace) -> int:
         return rc
 
     # Phase 4: upload. Already idempotent on youtube_id + youtube_caption_id.
-    return cmd_upload(argparse.Namespace(episode_id=eid))
+    rc = cmd_upload(argparse.Namespace(episode_id=eid))
+    if rc != 0:
+        return rc
+
+    # Phase 5: per-episode OG page. Renders deterministically from the
+    # SPA template; safe to re-run (atomic write produces same bytes
+    # given same inputs).
+    rc = cmd_og(argparse.Namespace(episode_id=eid))
+    if rc != 0:
+        return rc
+
+    # Phase 6: publish event. Refuses on any partial-success state via
+    # the five hard gates inside publish_episode. Now that Phase 5 has
+    # run, gate G5 can pass.
+    return cmd_publish(argparse.Namespace(episode_id=eid))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -482,6 +498,27 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_up.add_argument("--episode-id", default="ep-001")
 
+    p_og = sub.add_parser(
+        "og",
+        help=(
+            "Render docs/podcast/<id>/index.html per-episode OG page from "
+            "the SPA template. Populates manifest.og_html_path so publish "
+            "gate G5 can find the artifact."
+        ),
+    )
+    p_og.add_argument("--episode-id", default="ep-001")
+
+    p_pub = sub.add_parser(
+        "publish",
+        help=(
+            "Append/update data/episodes.json after every hard gate "
+            "passes (verified videoId, valid Episode shape, valid final "
+            "MP4, uploaded captions, OG page generated). Refuses on any "
+            "partial-success state."
+        ),
+    )
+    p_pub.add_argument("--episode-id", default="ep-001")
+
     p_run = sub.add_parser(
         "run",
         help=(
@@ -511,6 +548,8 @@ def main(argv: list[str] | None = None) -> int:
         "produce-segments": cmd_produce_segments,
         "stitch": cmd_stitch,
         "upload": cmd_upload,
+        "og": cmd_og,
+        "publish": cmd_publish,
         "run": cmd_run,
     }
     handler = locked_dispatch.get(args.cmd)

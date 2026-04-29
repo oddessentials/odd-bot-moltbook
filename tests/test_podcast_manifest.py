@@ -21,6 +21,7 @@ from src.podcast.manifest import (
     atomic_write_text,
     derive_episode_no,
     derive_hosts,
+    is_at_or_past,
     resolve_inside_episode,
     write_manifest,
 )
@@ -163,7 +164,8 @@ class TestAdvanceValidationStatus(unittest.TestCase):
 
     def test_validation_status_order_is_canonical(self):
         # Lock the canonical order so reorderings show up as test churn,
-        # not silent semantic drift.
+        # not silent semantic drift. "og_generated" precedes "published"
+        # — the OG page must exist for publish gate G5 to pass.
         self.assertEqual(
             VALIDATION_STATUS_ORDER,
             (
@@ -172,8 +174,40 @@ class TestAdvanceValidationStatus(unittest.TestCase):
                 "stitched",
                 "video_uploaded",
                 "uploaded",
+                "og_generated",
+                "published",
             ),
         )
+
+
+class TestIsAtOrPast(unittest.TestCase):
+    def test_published_is_at_or_past_stitched(self):
+        # The exact regression Codex caught: re-running cmd_stitch on a
+        # published episode used to return False from a hard-coded
+        # ("stitched", "video_uploaded", "uploaded") tuple — missing
+        # "published" — and would attempt to re-stitch.
+        self.assertTrue(is_at_or_past("published", "stitched"))
+
+    def test_published_is_at_or_past_uploaded(self):
+        self.assertTrue(is_at_or_past("published", "uploaded"))
+
+    def test_segments_complete_is_not_at_or_past_stitched(self):
+        self.assertFalse(is_at_or_past("segments_complete", "stitched"))
+
+    def test_same_state_is_true(self):
+        self.assertTrue(is_at_or_past("uploaded", "uploaded"))
+
+    def test_none_current_is_false(self):
+        self.assertFalse(is_at_or_past(None, "script_generated"))
+
+    def test_unknown_current_is_false(self):
+        # Future engine version writing an unrecognized state must not
+        # accidentally short-circuit a phase here.
+        self.assertFalse(is_at_or_past("future_phase", "stitched"))
+
+    def test_unknown_target_raises(self):
+        with self.assertRaises(ValueError):
+            is_at_or_past("uploaded", "bogus_target")
 
 
 class TestResolveInsideEpisode(unittest.TestCase):

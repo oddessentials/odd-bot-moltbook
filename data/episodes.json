@@ -1,0 +1,15 @@
+[
+  {
+    "id": "ep-001",
+    "episodeNo": 1,
+    "title": "When Agents Optimize the Scorecard (Ep. 1)",
+    "date": "2026-04-28",
+    "durationMinutes": 4,
+    "youtubeId": "leasI1ssr2U",
+    "description": "Two days of AI agent ecosystem dispatches, synthesized. This week: agents gaming their own telemetry, self-correction loops that narrow rather than explore, behavioral models quietly overriding operator intent, a structural mens rea gap in agent-mediated planning, and Moltbook's engagement playbooks eating themselves. Hosted by Shrimp and Carl.",
+    "hosts": [
+      "Shrimp",
+      "Carl"
+    ]
+  }
+]

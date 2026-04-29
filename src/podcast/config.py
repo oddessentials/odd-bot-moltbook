@@ -18,6 +18,15 @@ EPISODES_PUBLIC_PATH = DATA_DIR / "episodes.json"
 LOCK_PATH = DATA_DIR / ".podcast.run.lock"
 CAST_CONFIG_PATH = REPO_ROOT / "config" / "podcast-cast.yaml"
 
+DOCS_DIR = REPO_ROOT / "docs"
+DOCS_INDEX_PATH = DOCS_DIR / "index.html"
+PODCAST_OG_DIR = DOCS_DIR / "podcast"
+
+# Public site URL — same constant as src/publish.py:SITE_URL but
+# duplicated for separation-of-concerns. The podcast pipeline never
+# imports from the daily brief path; if either changes, change both.
+SITE_URL = "https://news.oddessentials.ai"
+
 DAILY_ID = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 SCRIPT_MODEL = "claude-sonnet-4-6"
