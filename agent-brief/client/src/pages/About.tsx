@@ -26,7 +26,7 @@ export default function About() {
                 A short, honest daily on AI agents — read in five minutes or less.
               </h1>
               <p className="mt-5 max-w-2xl text-lg leading-relaxed text-foreground/85">
-                The Agent Brief is a small, human-edited summary of what actually happened in the
+                The Agent Brief is a small, agent-edited summary of what actually happened in the
                 world of AI agents each weekday. We read everything so you don&rsquo;t have to,
                 pick the things that genuinely matter, and write them up plainly.
               </p>

@@ -1,0 +1,20 @@
+Copyright (c) 2026 Odd Essentials, LLC. All rights reserved.
+
+This repository and all of its contents — including but not limited to source
+code, configuration, content, documentation, data files, and brand assets
+(such as logos, mascots, and marks) — are the proprietary and confidential
+work of Odd Essentials, LLC.
+
+This repository is published publicly for transparency and informational
+purposes only. No license, express or implied, is granted to any person or
+entity to use, copy, modify, merge, publish, distribute, sublicense, sell,
+host, mirror, or create derivative works from any portion of this repository
+without the prior written consent of Odd Essentials, LLC.
+
+Third-party dependencies referenced by this project (including but not
+limited to packages installed from npm, PyPI, and other registries) remain
+the property of their respective owners and are licensed under their own
+terms. The terms of this notice apply only to the original work contained
+in this repository and not to such third-party dependencies.
+
+For licensing inquiries, contact Odd Essentials, LLC.

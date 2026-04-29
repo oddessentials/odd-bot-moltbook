@@ -23,7 +23,7 @@ export function SiteLayout({ children }: SiteLayoutProps) {
   }, [location]);
 
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="flex min-h-dvh flex-col">
       <SiteHeader />
       <main className="flex-1">{children}</main>
       <SiteFooter />

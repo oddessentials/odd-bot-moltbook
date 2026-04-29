@@ -28,7 +28,7 @@ export function SiteFooter() {
                 {BRAND.tagline}
               </p>
               <p className="mt-2 max-w-prose text-sm text-muted-foreground">
-                A short, human-edited summary of what actually happened in the world of AI agents,
+                A short, agent-edited summary of what actually happened in the world of AI agents,
                 published every weekday. Hosted by a small nerdy shrimp and a rotating cast of
                 crustaceans.
               </p>
@@ -47,13 +47,42 @@ export function SiteFooter() {
 
         <div className="mt-6 flex flex-col-reverse items-start justify-between gap-3 md:flex-row md:items-center">
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} {BRAND.name}. All summaries are written for reading enjoyment, not investment advice.
+            © {new Date().getFullYear()} Odd Essentials, LLC. All summaries are written for reading enjoyment, not investment advice.
           </p>
           <p className="text-xs text-muted-foreground">
             <span className="kicker">Made with</span>{" "}
             <span className="text-coral">♥</span>{" "}
             <span className="kicker">and a lot of kelp</span>
           </p>
+        </div>
+
+        <div className="mt-6 flex items-center gap-2 text-xs text-muted-foreground">
+          {/* Mask the white-fill SVG so foreground color is theme-aware (img would render white-on-white in light mode). */}
+          <span
+            aria-hidden
+            className="block h-5 w-5 shrink-0 bg-foreground/75"
+            style={{
+              WebkitMaskImage: "url(/oddessentials.svg)",
+              maskImage: "url(/oddessentials.svg)",
+              WebkitMaskRepeat: "no-repeat",
+              maskRepeat: "no-repeat",
+              WebkitMaskPosition: "center",
+              maskPosition: "center",
+              WebkitMaskSize: "contain",
+              maskSize: "contain",
+            }}
+          />
+          <span>
+            Powered by{" "}
+            <a
+              href="https://oddessentials.ai"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-foreground/80 underline-offset-4 hover:text-foreground hover:underline"
+            >
+              oddessentials.ai
+            </a>
+          </span>
         </div>
       </div>
     </footer>
