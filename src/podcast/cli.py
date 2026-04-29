@@ -9,6 +9,7 @@ specialised modules.
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date as _date
@@ -32,7 +33,7 @@ from .keys import (
 from .manifest import (
     derive_episode_no,
     derive_hosts,
-    episode_dir,
+    episode_dir,  # noqa: F401  -- used by cmd_generate_script via --force cleanup
     manifest_path_for,
     read_manifest,
     write_initial_manifest,
@@ -68,10 +69,17 @@ def cmd_generate_script(args: argparse.Namespace) -> int:
     if mpath.exists() and not args.force:
         print(
             f"manifest already exists at {mpath}. "
-            "Pass --force to overwrite (drops all per-segment pipeline state).",
+            "Pass --force to overwrite (drops all per-segment pipeline state "
+            "AND wipes any stale audio/clips/final.mp4/captions on disk).",
             file=sys.stderr,
         )
         return 2
+
+    if args.force:
+        edir = episode_dir(episode_id)
+        if edir.exists():
+            shutil.rmtree(edir)
+            print(f"Wiped stale {edir} (--force)")
 
     cast = load_cast()
     print(f"Generating script (model={SCRIPT_MODEL}) over {len(corpus)} brief(s)...")
