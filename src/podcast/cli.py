@@ -27,6 +27,7 @@ from .config import (
 from .corpus import load_eligible_corpus, summarize_corpus
 from .episodes import cmd_publish
 from .hedra import hedra_session
+from .og import cmd_og
 from .keys import (
     load_elevenlabs_key,
     load_hedra_key,
@@ -430,7 +431,21 @@ def cmd_run(args: argparse.Namespace) -> int:
         return rc
 
     # Phase 4: upload. Already idempotent on youtube_id + youtube_caption_id.
-    return cmd_upload(argparse.Namespace(episode_id=eid))
+    rc = cmd_upload(argparse.Namespace(episode_id=eid))
+    if rc != 0:
+        return rc
+
+    # Phase 5: per-episode OG page. Renders deterministically from the
+    # SPA template; safe to re-run (atomic write produces same bytes
+    # given same inputs).
+    rc = cmd_og(argparse.Namespace(episode_id=eid))
+    if rc != 0:
+        return rc
+
+    # Phase 6: publish event. Refuses on any partial-success state via
+    # the five hard gates inside publish_episode. Now that Phase 5 has
+    # run, gate G5 can pass.
+    return cmd_publish(argparse.Namespace(episode_id=eid))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -483,6 +498,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_up.add_argument("--episode-id", default="ep-001")
 
+    p_og = sub.add_parser(
+        "og",
+        help=(
+            "Render docs/podcast/<id>/index.html per-episode OG page from "
+            "the SPA template. Populates manifest.og_html_path so publish "
+            "gate G5 can find the artifact."
+        ),
+    )
+    p_og.add_argument("--episode-id", default="ep-001")
+
     p_pub = sub.add_parser(
         "publish",
         help=(
@@ -523,6 +548,7 @@ def main(argv: list[str] | None = None) -> int:
         "produce-segments": cmd_produce_segments,
         "stitch": cmd_stitch,
         "upload": cmd_upload,
+        "og": cmd_og,
         "publish": cmd_publish,
         "run": cmd_run,
     }
