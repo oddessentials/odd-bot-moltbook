@@ -1,0 +1,94 @@
+name: podcast-x-post
+
+# Downstream consumer of the engine's commit to data/episodes.json.
+# Posts each newly-published podcast episode to @oddessentials on X.
+# Mirrors the locked daily x-post pattern (.github/workflows/x-post.yml +
+# src/post_x.py): push-range diff, sidecar dedupe, latest-id-only
+# posting with skipped_catchup rows for older eligibles, [skip ci]
+# commit-back. The daily x-post workflow stays untouched; this is its
+# own independent surface on its own sidecar.
+
+on:
+  push:
+    branches: [main]
+    paths: [data/episodes.json]
+  workflow_dispatch:
+    inputs:
+      before_ref:
+        description: >-
+          Git ref to use as 'before' for the diff range. Empty (default)
+          means initial-push semantics — every id in data/episodes.json
+          becomes eligible. Used for derisking + ad-hoc replays.
+        required: false
+        default: ""
+
+# MUST share the daily x-post workflow's concurrency group. Both flows
+# read + rotate the same X_REFRESH_TOKEN secret. If they run in parallel
+# and X rotates the refresh token in BOTH responses, both call
+# `gh secret set X_REFRESH_TOKEN` — last writer wins, the loser's
+# rotated token becomes the canonical secret, and the winner's
+# already-rotated old token is invalidated by X. The next run on
+# either side fails with 401 and needs manual recovery.
+#
+# Shared mutex across both workflows is the cheapest fix: workflow
+# runs serialize globally (one daily + one podcast can't overlap),
+# rotation writeback is single-writer, and neither pipeline ever sees
+# a stale-but-clobbered secret. Trade-off: a long daily run delays a
+# podcast tweet (or vice versa), which is acceptable given both are
+# low-frequency (daily / weekly).
+concurrency:
+  group: x-post-main
+  cancel-in-progress: false
+
+# Sidecar push needs `contents: write` (same rationale as x-post.yml).
+permissions:
+  contents: write
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for push-range diff)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install package + tweepy
+        run: |
+          pip install -e .
+          pip install "tweepy>=4.14"
+
+      - name: Run podcast X-poster
+        env:
+          GITHUB_EVENT_BEFORE: ${{ github.event.before || github.event.inputs.before_ref }}
+          GITHUB_EVENT_AFTER: ${{ github.event.after || github.sha }}
+          # Same X channel as daily briefs — @oddessentials. Shares
+          # the X_REFRESH_TOKEN secret across both workflows; rotation
+          # writeback in either flow updates the canonical store.
+          X_CLIENT_ID: ${{ secrets.X_CLIENT_ID }}
+          X_CLIENT_SECRET: ${{ secrets.X_CLIENT_SECRET }}
+          X_REFRESH_TOKEN: ${{ secrets.X_REFRESH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ secrets.GH_PAT_FOR_SECRET_ROTATION }}
+        run: python -m src.post_podcast_x
+
+      - name: Commit sidecar
+        if: always()
+        run: |
+          if [[ -z "$(git status --porcelain data/podcast-x-posts.jsonl)" ]]; then
+            echo "No sidecar changes to commit."
+            exit 0
+          fi
+          git config user.email "odd-bot@oddessentials.ai"
+          git config user.name "odd-bot"
+          git add data/podcast-x-posts.jsonl
+          git commit -m "chore(podcast-x-post): record sidecar [skip ci]"
+          if ! git push; then
+            echo "::error title=Sidecar push failed::A podcast tweet may have already posted to @oddessentials but the sidecar commit did not reach origin/${{ github.ref_name }}. Re-running the workflow without manual repair will publish a duplicate. Inspect the X timeline, manually append the matching row to data/podcast-x-posts.jsonl, commit, and push to ${{ github.ref_name }} BEFORE letting the workflow re-fire."
+            exit 1
+          fi
