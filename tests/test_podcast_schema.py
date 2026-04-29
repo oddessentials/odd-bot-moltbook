@@ -162,6 +162,37 @@ class TestEpisodeRecord(unittest.TestCase):
         with self.assertRaises(ValidationError):
             EpisodeRecord(**self._ok_payload(title="x" * 81))
 
+    def test_id_pattern_rejects_dotdot_traversal(self):
+        # The id flows into the canonical URL, the OG meta tags, and
+        # data/episodes.json. ".."-bearing values would let a tampered
+        # record build a path-traversing canonical URL.
+        with self.assertRaises(ValidationError):
+            EpisodeRecord(**self._ok_payload(id="../malicious"))
+
+    def test_id_pattern_rejects_quote(self):
+        # An embedded quote would escape an OG meta tag's content="..."
+        # attribute. Schema check refuses before the renderer is reached.
+        with self.assertRaises(ValidationError):
+            EpisodeRecord(**self._ok_payload(id='ep-001"abc'))
+
+    def test_id_pattern_rejects_space(self):
+        with self.assertRaises(ValidationError):
+            EpisodeRecord(**self._ok_payload(id="ep 001"))
+
+    def test_id_pattern_rejects_slash(self):
+        with self.assertRaises(ValidationError):
+            EpisodeRecord(**self._ok_payload(id="ep/001"))
+
+    def test_id_pattern_rejects_leading_hyphen(self):
+        # Leading hyphens read as CLI flags in some downstream tools.
+        with self.assertRaises(ValidationError):
+            EpisodeRecord(**self._ok_payload(id="-ep001"))
+
+    def test_id_pattern_accepts_canonical_slug(self):
+        EpisodeRecord(**self._ok_payload(id="ep-001"))
+        EpisodeRecord(**self._ok_payload(id="weekly_ep_001"))
+        EpisodeRecord(**self._ok_payload(id="EP001"))
+
 
 class TestCastConfig(unittest.TestCase):
     def _member(self, **overrides) -> dict:

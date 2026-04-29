@@ -126,6 +126,42 @@ class TestRenderEpisodeOgHtml(unittest.TestCase):
         out = render_episode_og_html(_TEMPLATE_HTML, _record(episodeNo=42))
         self.assertIn("Episode 42 ·", out)
 
+    def test_canonical_url_html_escaped_in_meta_attribute(self):
+        # Defense in depth: even if a future caller bypasses
+        # EpisodeRecord's id pattern (e.g., constructs the model with
+        # `model_construct` and skips validation), the renderer's
+        # html.escape on the URL still keeps an attacker from breaking
+        # out of the og:url content="..." attribute.
+        from pydantic import BaseModel
+
+        class _Bypassed(BaseModel):
+            # Mirror EpisodeRecord but without the id pattern, so we
+            # can hand the renderer a record with adversarial chars.
+            id: str
+            episodeNo: int
+            title: str
+            date: str
+            durationMinutes: int
+            youtubeId: str
+            description: str
+            hosts: list[str]
+
+        adversarial = _Bypassed(
+            id='valid"><script>x</script>',
+            episodeNo=1,
+            title="Title",
+            date="2026-04-28",
+            durationMinutes=4,
+            youtubeId="abc",
+            description="A description that is definitely longer than the floor.",
+            hosts=["Shrimp"],
+        )
+        out = render_episode_og_html(_TEMPLATE_HTML, adversarial)
+        # Raw `<script>` tag must NOT appear unescaped in output.
+        self.assertNotIn("<script>", out)
+        # The URL still appears, with HTML-escaped angle brackets/quotes.
+        self.assertIn("&lt;script&gt;", out)
+
 
 class TestGenerateEpisodeOg(unittest.TestCase):
     def _seed(self, tdp: Path) -> Path:

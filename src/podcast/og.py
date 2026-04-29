@@ -88,7 +88,13 @@ def render_episode_og_html(template_html: str, record: EpisodeRecord) -> str:
     title = html.escape(record.title, quote=True)
     description_escaped = html.escape(record.description, quote=True)
     description = f"Episode {record.episodeNo} · {description_escaped}"
-    canonical_url = f"{SITE_URL}/podcast/{record.id}"
+    # record.id is schema-constrained to slug-safe chars (see
+    # EpisodeRecord.id pattern); HTML-escape is defense in depth for the
+    # case where a future caller bypasses the schema or for diagnostic
+    # output that prints the URL alongside other content.
+    canonical_url = html.escape(
+        f"{SITE_URL}/podcast/{record.id}", quote=True,
+    )
 
     rewrites: list[tuple[re.Pattern[str], str, str]] = [
         (_TITLE_TAG_RE,
