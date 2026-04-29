@@ -139,18 +139,18 @@ def _resolved_under(child: Path, parent: Path) -> bool:
 def is_segment_complete_and_valid(
     *,
     manifest_path: Path,
-    episode_id: str,
     seg: dict,
     idx: int,
 ) -> bool:
     """Decide whether `seg`'s already-recorded artifacts let us skip work.
 
-    Treats the manifest as source of truth for the artifact paths — the
-    on-disk files at convention paths are NOT consulted unless the
-    manifest happens to point there. The recorded paths must additionally
-    resolve INSIDE `data/episodes/<episode_id>/`, so a hand-edited or
-    compromised manifest cannot direct re-validation at unrelated local
-    media via `..`-segments, absolute paths, or escaping symlinks.
+    Treats the manifest as source of truth for the artifact PATHS but
+    NOT for the boundary they must resolve inside. The boundary is
+    derived from `manifest_path.parent` — the operator-supplied
+    filesystem location — so a tampered `manifest["id"]` cannot widen
+    or relocate the sandbox. Recorded artifacts must resolve inside
+    that path; `..` segments, absolute paths, and escaping symlinks
+    are all refused.
 
     If the manifest-recorded artifacts are present, sandboxed, and pass
     `validate_segment_outputs`, returns True and the caller should
@@ -170,7 +170,9 @@ def is_segment_complete_and_valid(
     audio_path = REPO_ROOT / audio_rel
     clip_path = REPO_ROOT / clip_rel
 
-    boundary = episode_dir(episode_id)
+    # Boundary is filesystem-derived. manifest["id"] is mutable and
+    # cannot be the source of the sandbox limit.
+    boundary = manifest_path.parent
     if not _resolved_under(audio_path, boundary) or not _resolved_under(clip_path, boundary):
         print(
             f"  seg{idx:02d}: manifest-recorded path escapes {boundary} "
@@ -227,13 +229,15 @@ def process_segment(
     if member is None:
         raise RuntimeError(f"segment {idx} speaker {speaker!r} not in cast {cast.slugs()}")
 
-    eid = manifest["id"]
+    # Episode id comes from the filesystem path that the orchestrator
+    # placed the manifest at, NOT from manifest["id"] — the latter is
+    # mutable and cannot direct convention-path writes (same threat
+    # model as the boundary check inside is_segment_complete_and_valid).
+    eid = manifest_path.parent.name
     audio_path = audio_dir(eid) / f"seg{idx:02d}.mp3"
     clip_path = clips_dir(eid) / f"seg{idx:02d}.mp4"
 
-    if is_segment_complete_and_valid(
-        manifest_path=manifest_path, episode_id=eid, seg=seg, idx=idx,
-    ):
+    if is_segment_complete_and_valid(manifest_path=manifest_path, seg=seg, idx=idx):
         return
 
     seg["attempts"] = int(seg.get("attempts", 0)) + 1

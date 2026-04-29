@@ -57,17 +57,23 @@ class TestValidateSegmentOutputs(unittest.TestCase):
 
 class TestIsSegmentCompleteAndValid(unittest.TestCase):
     """Covers the manifest-as-source-of-truth contract + the boundary
-    sandbox guard. All tests patch REPO_ROOT (in segments) and
-    EPISODES_DIR (in manifest) so fixtures live under a tempdir-rooted
-    fake repo without writing to data/episodes/ in the real working
-    tree.
+    sandbox guard derived from the manifest's filesystem location (not
+    from the mutable manifest["id"] field). Fixtures place the manifest
+    under tempdir/data/episodes/<id>/manifest.json so the helper's
+    `manifest_path.parent`-derived boundary mirrors production layout.
     """
 
     EPISODE_ID = "ep-test"
 
-    def _seed(self, td: Path, segments: list[dict]) -> Path:
-        path = td / "manifest.json"
-        write_manifest(path, {"id": self.EPISODE_ID, "segments": segments})
+    def _ep_dir(self, tdp: Path, episode_id: str | None = None) -> Path:
+        return tdp / "data" / "episodes" / (episode_id or self.EPISODE_ID)
+
+    def _seed(self, td: Path, segments: list[dict], *, manifest_id_override: str | None = None) -> Path:
+        ep_dir = self._ep_dir(td)
+        ep_dir.mkdir(parents=True, exist_ok=True)
+        path = ep_dir / "manifest.json"
+        manifest_id = manifest_id_override if manifest_id_override is not None else self.EPISODE_ID
+        write_manifest(path, {"id": manifest_id, "segments": segments})
         return path
 
     def _seg(self, **overrides) -> dict:
@@ -105,7 +111,6 @@ class TestIsSegmentCompleteAndValid(unittest.TestCase):
         with repo_patch, episodes_patch:
             return is_segment_complete_and_valid(
                 manifest_path=mpath,
-                episode_id=self.EPISODE_ID,
                 seg=seg,
                 idx=0,
             )
@@ -171,7 +176,6 @@ class TestIsSegmentCompleteAndValid(unittest.TestCase):
                 self.assertTrue(
                     is_segment_complete_and_valid(
                         manifest_path=mpath,
-                        episode_id=self.EPISODE_ID,
                         seg=seg,
                         idx=0,
                     )
@@ -198,7 +202,6 @@ class TestIsSegmentCompleteAndValid(unittest.TestCase):
                  mock.patch.object(segments_module, "validate_segment_outputs", side_effect=fake_validate):
                 result = is_segment_complete_and_valid(
                     manifest_path=mpath,
-                    episode_id=self.EPISODE_ID,
                     seg=seg,
                     idx=0,
                 )
@@ -224,7 +227,6 @@ class TestIsSegmentCompleteAndValid(unittest.TestCase):
              mock.patch.object(segments_module, "validate_segment_outputs", side_effect=fake_validate):
             result = is_segment_complete_and_valid(
                 manifest_path=mpath,
-                episode_id=self.EPISODE_ID,
                 seg=seg,
                 idx=0,
             )
@@ -281,8 +283,8 @@ class TestIsSegmentCompleteAndValid(unittest.TestCase):
             outside_audio.write_bytes(b"audio")
             outside_clip.write_bytes(b"clip")
 
-            ep_audio_dir = tdp / "data" / "episodes" / self.EPISODE_ID / "audio"
-            ep_clip_dir = tdp / "data" / "episodes" / self.EPISODE_ID / "clips"
+            ep_audio_dir = self._ep_dir(tdp) / "audio"
+            ep_clip_dir = self._ep_dir(tdp) / "clips"
             ep_audio_dir.mkdir(parents=True)
             ep_clip_dir.mkdir(parents=True)
             (ep_audio_dir / "seg00.mp3").symlink_to(outside_audio)
@@ -290,6 +292,33 @@ class TestIsSegmentCompleteAndValid(unittest.TestCase):
 
             seg = self._seg()  # default convention paths
             mpath = self._seed(tdp, [seg])
+            self._assert_escape_refused(tdp, mpath, seg)
+
+    def test_boundary_does_not_trust_mutable_manifest_id(self):
+        # Manifest sits at data/episodes/ep-test/manifest.json (the
+        # operator-created location). manifest["id"] is hand-edited to
+        # "evil-id" pointing at a sibling episode dir that the attacker
+        # has stocked with files. The recorded artifact paths reference
+        # that sibling dir. If the boundary were derived from
+        # manifest["id"], the recorded paths would resolve under
+        # data/episodes/evil-id/ and pass containment. With the
+        # filesystem-derived boundary (manifest_path.parent =
+        # data/episodes/ep-test/), the recorded paths fall outside and
+        # are refused.
+        with tempfile.TemporaryDirectory() as td:
+            tdp = Path(td)
+            attacker_dir = tdp / "data" / "episodes" / "evil-id"
+            (attacker_dir / "audio").mkdir(parents=True)
+            (attacker_dir / "clips").mkdir(parents=True)
+            (attacker_dir / "audio" / "seg.mp3").write_bytes(b"attacker-audio")
+            (attacker_dir / "clips" / "seg.mp4").write_bytes(b"attacker-clip")
+
+            seg = self._seg(
+                audio_path="data/episodes/evil-id/audio/seg.mp3",
+                clip_path="data/episodes/evil-id/clips/seg.mp4",
+            )
+            # Manifest claims id=evil-id but lives under ep-test.
+            mpath = self._seed(tdp, [seg], manifest_id_override="evil-id")
             self._assert_escape_refused(tdp, mpath, seg)
 
 
