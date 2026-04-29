@@ -415,6 +415,34 @@ class TestCmdFlipPublic(unittest.TestCase):
             self.assertEqual(kwargs["privacy_status"], "public")
             self.assertEqual(json.loads(mpath.read_text())["validation_status"], "live")
 
+    def test_happy_path_advances_manifest_visibility_to_public(self):
+        # The regression Codex caught: cmd_upload's idempotent verify
+        # raises if manifest.visibility doesn't match YouTube's reported
+        # privacyStatus. After flip-public, the manifest.visibility must
+        # advance to "public" so subsequent cmd_run re-runs don't abort.
+        from src.podcast.episodes import cmd_flip_public
+        import argparse
+        with tempfile.TemporaryDirectory() as td:
+            tdp = Path(td)
+            mpath = self._seed(tdp, validation_status="published", youtube_id="abc123")
+            # Seed the manifest with the production-default visibility.
+            payload = json.loads(mpath.read_text())
+            payload["visibility"] = "unlisted"
+            mpath.write_text(json.dumps(payload))
+
+            def fake_verify(*, credentials, video_id):
+                return {"id": video_id, "status": {"privacyStatus": "public"}}
+
+            with self._patch_dirs(tdp), \
+                 mock.patch("src.podcast.keys.load_youtube_credentials", return_value=object()), \
+                 mock.patch("src.podcast.youtube.set_youtube_privacy"), \
+                 mock.patch("src.podcast.youtube.verify_youtube_video", side_effect=fake_verify):
+                rc = cmd_flip_public(argparse.Namespace(episode_id=self.EPISODE_ID))
+            self.assertEqual(rc, 0)
+            updated = json.loads(mpath.read_text())
+            self.assertEqual(updated["visibility"], "public")
+            self.assertEqual(updated["validation_status"], "live")
+
     def test_raises_if_verify_shows_non_public(self):
         # Even with a successful update API call, re-confirm via
         # videos.list. If YouTube still reports "unlisted", manifest

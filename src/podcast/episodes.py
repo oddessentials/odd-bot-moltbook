@@ -49,6 +49,7 @@ from .manifest import (
     read_manifest,
     resolve_inside_dir,
     resolve_inside_episode,
+    write_manifest,
 )
 from .media import ffprobe_streams
 from .schema import EpisodeRecord
@@ -280,6 +281,14 @@ def cmd_flip_public(args: Any) -> int:
             f"videos.list reports privacyStatus={actual!r} after update; "
             "expected 'public'. Manual investigation required."
         )
+    # Sync manifest.visibility with the new YouTube state. cmd_upload's
+    # idempotent verify path compares manifest.visibility against
+    # YouTube's reported privacyStatus and raises on mismatch — without
+    # this update, every cmd_run re-run after flip-public would abort
+    # with "privacyStatus 'public' does not match requested 'unlisted'".
+    manifest = read_manifest(mpath)
+    manifest["visibility"] = "public"
+    write_manifest(mpath, manifest)
     advance_validation_status(mpath, "live")
     print(f"  privacyStatus: {actual!r}")
     print(f"  YouTube URL: https://www.youtube.com/watch?v={video_id}")
