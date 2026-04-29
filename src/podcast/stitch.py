@@ -16,22 +16,26 @@ from .config import (
     REPO_ROOT,
     STITCH_DURATION_TOLERANCE_SEC,
 )
-from .manifest import episode_dir, read_manifest
+from .manifest import read_manifest
 from .media import ffprobe_streams
 
 
 def stitch_episode(*, manifest_path: Path, overwrite: bool = False) -> Path:
     manifest = read_manifest(manifest_path)
-    eid = manifest["id"]
     segments = manifest["segments"]
     if any(s.get("clip_status") != "complete" or not s.get("clip_path") for s in segments):
         raise RuntimeError("not all segments are complete — refusing to stitch")
 
-    final_path = episode_dir(eid) / "final.mp4"
+    # Output paths derive from the operator-supplied filesystem location
+    # of the manifest, never from manifest["id"]. The latter is mutable
+    # and a tampered value would otherwise direct ffmpeg to write
+    # final.mp4 / concat.txt outside the episode directory.
+    work_dir = manifest_path.parent
+    final_path = work_dir / "final.mp4"
     if final_path.exists() and not overwrite:
         raise FileExistsError(f"{final_path} exists. Pass overwrite=True to replace.")
 
-    list_path = episode_dir(eid) / "concat.txt"
+    list_path = work_dir / "concat.txt"
     concat_text = "\n".join(
         f"file '{(REPO_ROOT / s['clip_path']).resolve()}'" for s in segments
     ) + "\n"

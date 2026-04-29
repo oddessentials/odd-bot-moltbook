@@ -32,9 +32,6 @@ from .hedra import (
     upload_hedra_audio,
 )
 from .manifest import (
-    audio_dir,
-    clips_dir,
-    episode_dir,
     read_manifest,
     update_segment_state,
 )
@@ -229,13 +226,14 @@ def process_segment(
     if member is None:
         raise RuntimeError(f"segment {idx} speaker {speaker!r} not in cast {cast.slugs()}")
 
-    # Episode id comes from the filesystem path that the orchestrator
-    # placed the manifest at, NOT from manifest["id"] — the latter is
-    # mutable and cannot direct convention-path writes (same threat
-    # model as the boundary check inside is_segment_complete_and_valid).
-    eid = manifest_path.parent.name
-    audio_path = audio_dir(eid) / f"seg{idx:02d}.mp3"
-    clip_path = clips_dir(eid) / f"seg{idx:02d}.mp4"
+    # Convention paths are derived structurally from the manifest's own
+    # filesystem location. Anchoring on manifest_path.parent (rather than
+    # manifest["id"] via audio_dir/clips_dir) keeps a tampered manifest
+    # id field from directing fresh-render writes outside the episode
+    # directory.
+    work_dir = manifest_path.parent
+    audio_path = work_dir / "audio" / f"seg{idx:02d}.mp3"
+    clip_path = work_dir / "clips" / f"seg{idx:02d}.mp4"
 
     if is_segment_complete_and_valid(manifest_path=manifest_path, seg=seg, idx=idx):
         return
