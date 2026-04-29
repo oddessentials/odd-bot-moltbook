@@ -521,6 +521,59 @@ def _run_build(build_started_ts: float, briefs: list[dict]) -> None:
 
     template_html = DOCS_INDEX.read_text()
     _emit_per_brief_pages(briefs, template_html, DOCS_PATH)
+    _emit_per_episode_pages(template_html, DOCS_PATH)
+
+
+def _emit_per_episode_pages(template_html: str, docs_root: Path) -> list[str]:
+    """Emit `docs_root/podcast/<id>/index.html` for each entry in
+    data/episodes.json.
+
+    Mirrors `_emit_per_brief_pages` for the podcast surface. Vite's
+    emptyOutDir wiped the entire `docs_root` tree before this build, so
+    every per-episode OG page must be re-emitted on every daily run —
+    otherwise the artifacts the engine wrote during a previous podcast
+    publish disappear and X.com / search-engine crawlers fall back to
+    the SPA shell with generic site-level meta.
+
+    Reads the engine's published list at data/episodes.json. Skips
+    silently if the file is missing or empty (no episodes published
+    yet → nothing to emit). Returns the ordered list of episode ids
+    actually emitted.
+
+    Reaches across module boundaries to import `render_episode_og_html`
+    from `src.podcast.og`. The boundary cross is intentional: the daily
+    publish IS the rebuild step that owns docs/, and re-emitting episode
+    OGs from this single point keeps the persistence invariant local to
+    one function rather than scattered across both pipelines.
+    """
+    from src.podcast.og import render_episode_og_html
+    from src.podcast.schema import EpisodeRecord
+
+    episodes_path = DATA_DIR / "episodes.json"
+    if not episodes_path.exists():
+        return []
+    try:
+        raw = json.loads(episodes_path.read_text())
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(raw, list) or not raw:
+        return []
+
+    emitted: list[str] = []
+    for entry in raw:
+        try:
+            record = EpisodeRecord.model_validate(entry)
+        except Exception:
+            # A malformed entry in episodes.json should not block the
+            # rest. The publish-event writer's gate G2 is the authority
+            # for shape; this is best-effort re-emission.
+            continue
+        rendered = render_episode_og_html(template_html, record)
+        out_path = docs_root / "podcast" / record.id / "index.html"
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(rendered)
+        emitted.append(record.id)
+    return emitted
 
 
 def _emit_per_brief_pages(

@@ -226,3 +226,18 @@ def verify_youtube_video(*, credentials, video_id: str) -> dict[str, Any]:
     if not items:
         raise RuntimeError(f"videos.list found no item for id={video_id}")
     return items[0]
+
+
+def set_youtube_privacy(*, credentials, video_id: str, privacy_status: str) -> dict[str, Any]:
+    """Update privacyStatus on an existing video and return the new record.
+
+    Used for the unlisted→public flip in Phase 2.4. The body is minimal —
+    just the id + the status field — because videos.update requires every
+    `part` you list to be present in the body, and we only want to mutate
+    `status`. Callers verify via verify_youtube_video.
+    """
+    from googleapiclient.discovery import build
+    youtube = build("youtube", "v3", credentials=credentials, cache_discovery=False)
+    body = {"id": video_id, "status": {"privacyStatus": privacy_status}}
+    resp = youtube.videos().update(part="status", body=body).execute()
+    return resp

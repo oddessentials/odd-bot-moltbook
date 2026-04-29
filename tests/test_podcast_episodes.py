@@ -324,5 +324,119 @@ class TestEpisodesJsonReadWrite(unittest.TestCase):
             self.assertEqual([e["id"] for e in payload], ["ep-001b", "ep-001"])
 
 
+class TestCmdFlipPublic(unittest.TestCase):
+    """Phase 2.4 manual flip gate. videos.update is mocked; what's pinned
+    is the gate (refuses below 'published') and the verify step that
+    confirms the API actually moved privacyStatus to 'public'."""
+
+    EPISODE_ID = "ep-test"
+
+    def _seed(self, tdp: Path, *, validation_status: str, youtube_id=None) -> Path:
+        ep_dir = tdp / "data" / "episodes" / self.EPISODE_ID
+        ep_dir.mkdir(parents=True)
+        manifest = {
+            "id": self.EPISODE_ID,
+            "validation_status": validation_status,
+        }
+        if youtube_id is not None:
+            manifest["youtube_id"] = youtube_id
+        path = ep_dir / "manifest.json"
+        write_manifest(path, manifest)
+        return path
+
+    def _patch_dirs(self, tdp: Path):
+        return mock.patch.multiple(
+            manifest_module,
+            REPO_ROOT=tdp,
+            EPISODES_DIR=tdp / "data" / "episodes",
+        )
+
+    def test_refuses_if_below_published(self):
+        from src.podcast.episodes import cmd_flip_public
+        import argparse
+        with tempfile.TemporaryDirectory() as td:
+            tdp = Path(td)
+            self._seed(tdp, validation_status="uploaded", youtube_id="abc")
+            with self._patch_dirs(tdp), \
+                 mock.patch("src.podcast.keys.load_youtube_credentials") as mck_creds, \
+                 mock.patch("src.podcast.youtube.set_youtube_privacy") as mck_set, \
+                 mock.patch("src.podcast.youtube.verify_youtube_video") as mck_verify:
+                rc = cmd_flip_public(argparse.Namespace(episode_id=self.EPISODE_ID))
+            self.assertEqual(rc, 2)
+            mck_creds.assert_not_called()
+            mck_set.assert_not_called()
+            mck_verify.assert_not_called()
+
+    def test_refuses_at_og_generated(self):
+        from src.podcast.episodes import cmd_flip_public
+        import argparse
+        with tempfile.TemporaryDirectory() as td:
+            tdp = Path(td)
+            self._seed(tdp, validation_status="og_generated", youtube_id="abc")
+            with self._patch_dirs(tdp), \
+                 mock.patch("src.podcast.youtube.set_youtube_privacy") as mck_set, \
+                 mock.patch("src.podcast.youtube.verify_youtube_video"):
+                rc = cmd_flip_public(argparse.Namespace(episode_id=self.EPISODE_ID))
+            self.assertEqual(rc, 2)
+            mck_set.assert_not_called()
+
+    def test_refuses_if_youtube_id_missing(self):
+        from src.podcast.episodes import cmd_flip_public
+        import argparse
+        with tempfile.TemporaryDirectory() as td:
+            tdp = Path(td)
+            self._seed(tdp, validation_status="published", youtube_id=None)
+            with self._patch_dirs(tdp), \
+                 mock.patch("src.podcast.youtube.set_youtube_privacy") as mck_set:
+                rc = cmd_flip_public(argparse.Namespace(episode_id=self.EPISODE_ID))
+            self.assertEqual(rc, 2)
+            mck_set.assert_not_called()
+
+    def test_happy_path_flips_and_advances_to_live(self):
+        from src.podcast.episodes import cmd_flip_public
+        import argparse
+        with tempfile.TemporaryDirectory() as td:
+            tdp = Path(td)
+            mpath = self._seed(tdp, validation_status="published", youtube_id="abc123")
+
+            def fake_verify(*, credentials, video_id):
+                return {"id": video_id, "status": {"privacyStatus": "public"}}
+
+            with self._patch_dirs(tdp), \
+                 mock.patch("src.podcast.keys.load_youtube_credentials", return_value=object()), \
+                 mock.patch("src.podcast.youtube.set_youtube_privacy") as mck_set, \
+                 mock.patch("src.podcast.youtube.verify_youtube_video", side_effect=fake_verify):
+                rc = cmd_flip_public(argparse.Namespace(episode_id=self.EPISODE_ID))
+
+            self.assertEqual(rc, 0)
+            mck_set.assert_called_once()
+            kwargs = mck_set.call_args.kwargs
+            self.assertEqual(kwargs["video_id"], "abc123")
+            self.assertEqual(kwargs["privacy_status"], "public")
+            self.assertEqual(json.loads(mpath.read_text())["validation_status"], "live")
+
+    def test_raises_if_verify_shows_non_public(self):
+        # Even with a successful update API call, re-confirm via
+        # videos.list. If YouTube still reports "unlisted", manifest
+        # must NOT advance to "live".
+        from src.podcast.episodes import cmd_flip_public
+        import argparse
+        with tempfile.TemporaryDirectory() as td:
+            tdp = Path(td)
+            mpath = self._seed(tdp, validation_status="published", youtube_id="abc123")
+
+            def fake_verify(*, credentials, video_id):
+                return {"id": video_id, "status": {"privacyStatus": "unlisted"}}
+
+            with self._patch_dirs(tdp), \
+                 mock.patch("src.podcast.keys.load_youtube_credentials", return_value=object()), \
+                 mock.patch("src.podcast.youtube.set_youtube_privacy"), \
+                 mock.patch("src.podcast.youtube.verify_youtube_video", side_effect=fake_verify), \
+                 self.assertRaises(RuntimeError) as cm:
+                cmd_flip_public(argparse.Namespace(episode_id=self.EPISODE_ID))
+            self.assertIn("unlisted", str(cm.exception))
+            self.assertEqual(json.loads(mpath.read_text())["validation_status"], "published")
+
+
 if __name__ == "__main__":
     unittest.main()
