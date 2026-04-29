@@ -110,6 +110,37 @@ exec >>"$LOG_FILE" 2>&1
 echo "----"
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh start"
 
+# Pre-flight push. If the prior run committed locally but the push
+# failed (network blip, GH momentary outage), HEAD is ahead of
+# origin/main with an episode commit that podcast-x-post.yml never
+# saw. Without this guard, the next invocation would compute the
+# next_episode_id from the LOCAL episodes.json (which already
+# includes the unpushed episode) and generate a brand-new episode —
+# burning Anthropic + ElevenLabs + Hedra credits while the previous
+# episode silently piles up unpushed commits.
+#
+# Recovery posture: push the prior commit, then EXIT before
+# generating new content. The downstream x-post fires on the
+# now-pushed commit. The next scheduled cadence (or RunAtLoad
+# invocation) picks up the steady-state monotonic id.
+AHEAD=$(git rev-list "@{u}..HEAD" --count 2>/dev/null || echo 0)
+if [ "$AHEAD" -gt 0 ]; then
+    echo "  pre-flight: $AHEAD local commit(s) ahead of origin/main."
+    echo "  pushing first to fire the prior run's downstream x-post"
+    echo "  before considering any new content generation."
+    if ! git push origin main; then
+        echo "  WARN: pre-flight push failed. Refusing to generate new content"
+        echo "        while local episode commits are unpushed. Operator:"
+        echo "        diagnose (network? auth? branch protection?), then re-run."
+        exit 1
+    fi
+    echo "  pushed; podcast-x-post.yml will fire on the pushed commit."
+    echo "  exiting WITHOUT generating new content — the next scheduled"
+    echo "  cadence picks up steady-state."
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh finished (pre-flight push only)"
+    exit 0
+fi
+
 NEXT_NO=$("$REPO_ROOT/.venv/bin/python" -c \
     'from src.podcast.manifest import derive_episode_no; print(derive_episode_no())')
 NEXT_ID="ep-$(printf '%03d' "$NEXT_NO")"
