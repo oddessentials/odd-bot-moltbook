@@ -26,7 +26,7 @@ cast:
     role: anchor
     persona: small witty energetic crustacean anchor
     elevenlabs_voice_id: IKne3meq5aSn9XLyUdCD  # Charlie — premade, Australian, deep, energetic, conversational
-    hedra_image_asset_id: ac1d9fac-8bc6-48bd-9436-9f4cedac70d6  # Imagen4 head-and-shoulders 16:9, generated 2026-04-28 (Hedra Character-3 preserves input aspect ratio — 16:9 cast required for 720p × 16:9 output)
+    hedra_image_asset_id: 02852914-2fca-4e73-a226-63fc76f45353  # Imagen4 head-and-shoulders 16:9, then center-cropped to true 1280x720 and re-uploaded (Imagen4's "16:9" preset is actually 1408x768 = 1.833 aspect; Hedra preserves source aspect, so true 16:9 input is required for 1280x720 output).
     local_reference_path: data/cast/shrimp.png
 
   carl:
@@ -34,5 +34,5 @@ cast:
     role: guest
     persona: sardonic husky-voiced crab guest
     elevenlabs_voice_id: N2lVS1w4EtoT3dr4eOWO  # Callum — premade, Husky Trickster, characters_animation
-    hedra_image_asset_id: 26a29d7a-03ca-4ead-8cdb-378a3e7e89cd  # Imagen4 head-and-shoulders 16:9, generated 2026-04-28 (Hedra Character-3 preserves input aspect ratio)
+    hedra_image_asset_id: ec3feed8-1b9a-4c5a-b883-612ae3ac196d  # Imagen4 head-and-shoulders 16:9, then center-cropped to true 1280x720 and re-uploaded.
     local_reference_path: data/cast/carl.png
