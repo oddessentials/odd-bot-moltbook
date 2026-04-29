@@ -10,13 +10,15 @@ in-process concurrent updates from the parallel-segment producer.
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
 import os
 import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from .cast import cast_config_hash
 from .config import (
@@ -26,11 +28,40 @@ from .config import (
     EPISODES_PUBLIC_PATH,
     HEDRA_MODEL,
     HEDRA_MODEL_ID,
+    LOCK_PATH,
     RESOLUTION,
     SCRIPT_MODEL,
     TTS_MODEL,
 )
 from .schema import BriefSummary, CastConfig, EpisodeScript
+
+
+@contextlib.contextmanager
+def acquire_run_lock(path: Path = LOCK_PATH) -> Iterator[None]:
+    """Process-exclusive non-blocking flock at the podcast lock path.
+
+    Mirrors src/publish.py's acquire_lock pattern. Yields on acquisition;
+    raises BlockingIOError if the lock is held by another process. Caller
+    is expected to catch BlockingIOError at the CLI boundary and exit 0
+    cleanly (sibling run in progress).
+
+    Lock is auto-released by the kernel on process death, so no stale-lock
+    recovery is needed.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(path), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        try:
+            os.close(fd)
+        except OSError:
+            pass
 
 
 def episode_dir(episode_id: str) -> Path:

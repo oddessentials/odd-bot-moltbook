@@ -31,6 +31,7 @@ from .keys import (
     load_youtube_credentials,
 )
 from .manifest import (
+    acquire_run_lock,
     derive_episode_no,
     derive_hosts,
     episode_dir,  # noqa: F401  -- used by cmd_generate_script via --force cleanup
@@ -369,14 +370,26 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     if args.cmd == "show-corpus":
+        # Read-only diagnostic — does not contend with concurrent runs.
         return cmd_show_corpus(args)
-    if args.cmd == "generate-script":
-        return cmd_generate_script(args)
-    if args.cmd == "produce-segments":
-        return cmd_produce_segments(args)
-    if args.cmd == "stitch":
-        return cmd_stitch(args)
-    if args.cmd == "upload":
-        return cmd_upload(args)
-    parser.error(f"unknown command {args.cmd!r}")
-    return 2
+
+    locked_dispatch = {
+        "generate-script": cmd_generate_script,
+        "produce-segments": cmd_produce_segments,
+        "stitch": cmd_stitch,
+        "upload": cmd_upload,
+    }
+    handler = locked_dispatch.get(args.cmd)
+    if handler is None:
+        parser.error(f"unknown command {args.cmd!r}")
+        return 2
+    try:
+        with acquire_run_lock():
+            return handler(args)
+    except BlockingIOError:
+        print(
+            "Another podcast run holds the lock. Exiting cleanly to let the "
+            "sibling finish.",
+            file=sys.stderr,
+        )
+        return 0
