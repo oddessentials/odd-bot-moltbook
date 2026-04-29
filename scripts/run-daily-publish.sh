@@ -20,6 +20,28 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# Branch guard. The orchestrator commits + pushes on whatever branch is
+# checked out. If the operator has a feature branch checked out at
+# 05:00, the daily publish lands on that branch — main stays stale,
+# GitHub Pages doesn't deploy, the X-post workflow doesn't trigger
+# (it watches data/briefs.json on main). Refuse cleanly with a loud
+# log line; the operator notices a missed post and finds the cause
+# in moltbook-daily.log without scattering chore(publish) commits
+# across feature branches.
+CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "DETACHED")"
+if [ "$CURRENT_BRANCH" != "main" ]; then
+    LOG_DIR="$REPO_ROOT/logs"
+    mkdir -p "$LOG_DIR"
+    {
+        echo "----"
+        echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-daily-publish.sh refused"
+        echo "  current branch: $CURRENT_BRANCH"
+        echo "  required branch: main"
+        echo "  no publish, no commit, no push. Operator: switch to main and re-run, or wait for tomorrow's window."
+    } >>"$LOG_DIR/moltbook-daily.log"
+    exit 0
+fi
+
 # launchd's default PATH excludes nvm-managed binaries. The orchestrator's
 # `pnpm --dir agent-brief build` subprocess inherits this script's PATH,
 # so resolve pnpm/node here before invoking Python. Source nvm.sh if
