@@ -18,8 +18,9 @@ import { toast } from "sonner";
 
 import SiteLayout from "@/components/SiteLayout";
 import BriefCard from "@/components/BriefCard";
-import { episodes, formatLongDate, type Brief } from "@/data/content";
+import { formatLongDate, type Brief } from "@/data/content";
 import { useBriefs } from "@/hooks/useBriefs";
+import { useEpisodes } from "@/hooks/useEpisodes";
 import { BRAND } from "@/lib/brand";
 import { useState } from "react";
 
@@ -152,6 +153,7 @@ function RecentBriefs({ briefs }: { briefs: Brief[] }) {
 }
 
 function LatestEpisode() {
+  const { episodes } = useEpisodes();
   const ep = episodes[0];
   if (!ep) return null;
   return (

@@ -11,10 +11,12 @@
 import { useState } from "react";
 import SiteLayout from "@/components/SiteLayout";
 import EpisodeCard from "@/components/EpisodeCard";
-import { episodes, formatLongDate } from "@/data/content";
+import { formatLongDate } from "@/data/content";
+import { useEpisodes } from "@/hooks/useEpisodes";
 import { BRAND } from "@/lib/brand";
 
 export default function Podcast() {
+  const { episodes } = useEpisodes();
   const [activeId, setActiveId] = useState(episodes[0]?.id ?? "");
   const featured = episodes.find((e) => e.id === activeId) ?? episodes[0];
   if (!featured) return null;
