@@ -123,6 +123,14 @@ echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh start"
 # generating new content. The downstream x-post fires on the
 # now-pushed commit. The next scheduled cadence (or RunAtLoad
 # invocation) picks up the steady-state monotonic id.
+#
+# Fetch first so `@{u}` reflects ACTUAL origin/main, not the
+# locally-cached refs. Without fetch the ahead-check still detects
+# local unpushed work, but it can't see remote drift (e.g., a manual
+# operator push between the daily 05:00 and the weekly 09:00). Fetch
+# failure is non-fatal — the local ahead-check still has value, and
+# the post-run push will surface any remote-drift conflict loudly.
+git fetch origin main 2>&1 | sed 's/^/  fetch: /' || true
 AHEAD=$(git rev-list "@{u}..HEAD" --count 2>/dev/null || echo 0)
 if [ "$AHEAD" -gt 0 ]; then
     echo "  pre-flight: $AHEAD local commit(s) ahead of origin/main."
