@@ -164,8 +164,9 @@ class TestAdvanceValidationStatus(unittest.TestCase):
 
     def test_validation_status_order_is_canonical(self):
         # Lock the canonical order so reorderings show up as test churn,
-        # not silent semantic drift. "og_generated" precedes "published"
-        # — the OG page must exist for publish gate G5 to pass.
+        # not silent semantic drift. Phase 2 tail: og_generated unblocks
+        # publish gate G5; published is the data/episodes.json publish
+        # event; live is the post-flip-to-public terminal state.
         self.assertEqual(
             VALIDATION_STATUS_ORDER,
             (
@@ -176,6 +177,7 @@ class TestAdvanceValidationStatus(unittest.TestCase):
                 "uploaded",
                 "og_generated",
                 "published",
+                "live",
             ),
         )
 

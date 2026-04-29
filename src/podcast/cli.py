@@ -25,7 +25,7 @@ from .config import (
     YOUTUBE_DISCLAIMER,
 )
 from .corpus import load_eligible_corpus, summarize_corpus
-from .episodes import cmd_publish
+from .episodes import cmd_flip_public, cmd_publish
 from .hedra import hedra_session
 from .og import cmd_og
 from .keys import (
@@ -519,6 +519,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_pub.add_argument("--episode-id", default="ep-001")
 
+    p_flip = sub.add_parser(
+        "flip-public",
+        help=(
+            "Flip the YouTube video from unlisted to public. Gated on "
+            "validation_status >= 'published'. NOT in `run` by design — "
+            "the final manual review gate."
+        ),
+    )
+    p_flip.add_argument("--episode-id", default="ep-001")
+
     p_run = sub.add_parser(
         "run",
         help=(
@@ -550,6 +560,7 @@ def main(argv: list[str] | None = None) -> int:
         "upload": cmd_upload,
         "og": cmd_og,
         "publish": cmd_publish,
+        "flip-public": cmd_flip_public,
         "run": cmd_run,
     }
     handler = locked_dispatch.get(args.cmd)

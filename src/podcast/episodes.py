@@ -49,6 +49,7 @@ from .manifest import (
     read_manifest,
     resolve_inside_dir,
     resolve_inside_episode,
+    write_manifest,
 )
 from .media import ffprobe_streams
 from .schema import EpisodeRecord
@@ -227,6 +228,72 @@ def publish_episode(
     by_id[record.id] = record
     _write_episodes_json(list(by_id.values()), episodes_path)
     return record
+
+
+def cmd_flip_public(args: Any) -> int:
+    """Flip the YouTube video from unlisted to public.
+
+    The final manual step. Gated on validation_status >= "published"
+    (the data/episodes.json publish event has fired, OG page is on
+    disk, captions uploaded, MP4 validated). Refuses earlier states
+    so a half-published episode can't accidentally go public.
+
+    NOT wired into cmd_run by design — operator runs this manually
+    after reviewing the deployed SPA + the unlisted YouTube video.
+    The "site contract is valid" check is human, not automated.
+    """
+    from .keys import load_youtube_credentials
+    from .manifest import (
+        advance_validation_status,
+        is_at_or_past,
+        manifest_path_for,
+    )
+    from .youtube import set_youtube_privacy, verify_youtube_video
+
+    eid = args.episode_id
+    mpath = manifest_path_for(eid)
+    if not mpath.exists():
+        print(f"manifest missing at {mpath}", file=sys.stderr)
+        return 2
+    manifest = read_manifest(mpath)
+    current = manifest.get("validation_status")
+    if not is_at_or_past(current, "published"):
+        print(
+            f"refused — validation_status={current!r} is not at or past "
+            "'published'. Run `publish` first; it gates on the five hard "
+            "gates (videoId, Episode shape, MP4, captions, OG page).",
+            file=sys.stderr,
+        )
+        return 2
+
+    video_id = manifest.get("youtube_id")
+    if not video_id:
+        print("youtube_id missing from manifest", file=sys.stderr)
+        return 2
+
+    creds = load_youtube_credentials()
+    print(f"Flipping {video_id} → public...")
+    set_youtube_privacy(credentials=creds, video_id=video_id, privacy_status="public")
+    record = verify_youtube_video(credentials=creds, video_id=video_id)
+    actual = record["status"]["privacyStatus"]
+    if actual != "public":
+        raise RuntimeError(
+            f"videos.list reports privacyStatus={actual!r} after update; "
+            "expected 'public'. Manual investigation required."
+        )
+    # Sync manifest.visibility with the new YouTube state. cmd_upload's
+    # idempotent verify path compares manifest.visibility against
+    # YouTube's reported privacyStatus and raises on mismatch — without
+    # this update, every cmd_run re-run after flip-public would abort
+    # with "privacyStatus 'public' does not match requested 'unlisted'".
+    manifest = read_manifest(mpath)
+    manifest["visibility"] = "public"
+    write_manifest(mpath, manifest)
+    advance_validation_status(mpath, "live")
+    print(f"  privacyStatus: {actual!r}")
+    print(f"  YouTube URL: https://www.youtube.com/watch?v={video_id}")
+    print("validation_status=live")
+    return 0
 
 
 def cmd_publish(args: Any) -> int:

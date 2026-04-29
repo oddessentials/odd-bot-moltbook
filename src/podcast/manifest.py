@@ -223,6 +223,7 @@ VALIDATION_STATUS_ORDER: tuple[str, ...] = (
     "uploaded",
     "og_generated",
     "published",
+    "live",
 )
 
 

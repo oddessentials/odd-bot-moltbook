@@ -27,6 +27,7 @@ from unittest import mock
 
 from src.publish import (
     _emit_per_brief_pages,
+    _emit_per_episode_pages,
     _load_publish_record_ids,
     _reconcile_finalization,
     _render_per_brief_html,
@@ -398,6 +399,107 @@ class TestEmitPerBriefPages(unittest.TestCase):
             emitted = _emit_per_brief_pages(briefs, _TEMPLATE_HTML, docs_root)
             self.assertEqual(emitted, [])
             self.assertFalse((docs_root / "brief").exists())
+
+
+class TestEmitPerEpisodePages(unittest.TestCase):
+    """Per-episode emit loop. Reads data/episodes.json (engine-owned) and
+    re-emits docs/podcast/<id>/index.html on each daily build so vite's
+    emptyOutDir wipe doesn't strand the per-episode OG artifacts.
+    """
+
+    def _setup(self, tmp: Path, episodes_payload: object):
+        docs_root = tmp / "docs"
+        docs_root.mkdir()
+        data_dir = tmp / "data"
+        data_dir.mkdir()
+        episodes_path = data_dir / "episodes.json"
+        episodes_path.write_text(json.dumps(episodes_payload))
+        return docs_root, data_dir
+
+    def _record(self, **overrides) -> dict:
+        payload = {
+            "id": "ep-001",
+            "episodeNo": 1,
+            "title": "Episode 1 title",
+            "date": "2026-04-28",
+            "durationMinutes": 4,
+            "youtubeId": "abc123",
+            "description": "An episode description that is long enough to satisfy the schema.",
+            "hosts": ["Shrimp"],
+        }
+        payload.update(overrides)
+        return payload
+
+    def _patch_data_dir(self, data_dir: Path):
+        from src import publish as publish_module
+        return mock.patch.object(publish_module, "DATA_DIR", data_dir)
+
+    def test_emits_for_each_published_episode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpp = Path(tmp)
+            docs_root, data_dir = self._setup(
+                tmpp,
+                [self._record(id="ep-001", episodeNo=1),
+                 self._record(id="ep-002", episodeNo=2, title="Episode 2 title")],
+            )
+            with self._patch_data_dir(data_dir):
+                emitted = _emit_per_episode_pages(_TEMPLATE_HTML, docs_root)
+            self.assertEqual(set(emitted), {"ep-001", "ep-002"})
+            for eid in ("ep-001", "ep-002"):
+                self.assertTrue(
+                    (docs_root / "podcast" / eid / "index.html").exists()
+                )
+
+    def test_missing_episodes_json_is_silent_noop(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpp = Path(tmp)
+            docs_root = tmpp / "docs"
+            docs_root.mkdir()
+            data_dir = tmpp / "data"
+            data_dir.mkdir()
+            with self._patch_data_dir(data_dir):
+                emitted = _emit_per_episode_pages(_TEMPLATE_HTML, docs_root)
+            self.assertEqual(emitted, [])
+            self.assertFalse((docs_root / "podcast").exists())
+
+    def test_empty_list_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpp = Path(tmp)
+            docs_root, data_dir = self._setup(tmpp, [])
+            with self._patch_data_dir(data_dir):
+                emitted = _emit_per_episode_pages(_TEMPLATE_HTML, docs_root)
+            self.assertEqual(emitted, [])
+            self.assertFalse((docs_root / "podcast").exists())
+
+    def test_malformed_entry_skipped_does_not_block_others(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpp = Path(tmp)
+            docs_root, data_dir = self._setup(
+                tmpp,
+                [
+                    {"id": "ep-001"},  # missing required fields → skip
+                    self._record(id="ep-002", episodeNo=2),
+                ],
+            )
+            with self._patch_data_dir(data_dir):
+                emitted = _emit_per_episode_pages(_TEMPLATE_HTML, docs_root)
+            self.assertEqual(emitted, ["ep-002"])
+            self.assertTrue(
+                (docs_root / "podcast" / "ep-002" / "index.html").exists()
+            )
+            self.assertFalse((docs_root / "podcast" / "ep-001").exists())
+
+    def test_corrupt_json_silent_noop(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpp = Path(tmp)
+            docs_root = tmpp / "docs"
+            docs_root.mkdir()
+            data_dir = tmpp / "data"
+            data_dir.mkdir()
+            (data_dir / "episodes.json").write_text("{not json")
+            with self._patch_data_dir(data_dir):
+                emitted = _emit_per_episode_pages(_TEMPLATE_HTML, docs_root)
+            self.assertEqual(emitted, [])
 
 
 if __name__ == "__main__":
