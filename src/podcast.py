@@ -169,6 +169,22 @@ class EpisodeScript(BaseModel):
     segments: list[Segment] = Field(..., min_length=8, max_length=16)
 
 
+class EpisodeRecord(BaseModel):
+    """Engine output mirroring the SPA Episode TS interface at
+    agent-brief/client/src/data/content.ts:61-70. Phase 0b validates the
+    shape and stores it in the gitignored manifest only — no public
+    episodes.json write until Phase 2."""
+
+    id: str
+    episodeNo: int = Field(..., ge=1)
+    title: str = Field(..., min_length=1, max_length=80)
+    date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    durationMinutes: int = Field(..., ge=1)
+    youtubeId: str = Field(..., min_length=1)
+    description: str = Field(..., min_length=1)
+    hosts: list[str] = Field(..., min_length=1)
+
+
 @dataclass(frozen=True)
 class BriefSummary:
     """A single published daily brief, narrowed to the fields the script
@@ -948,6 +964,369 @@ def cmd_generate_script(args: argparse.Namespace) -> int:
     return 0
 
 
+EPISODE_DURATION_MIN_SEC = 60.0
+EPISODE_DURATION_MAX_SEC = 360.0
+STITCH_DURATION_TOLERANCE_SEC = 2.0
+
+YOUTUBE_CATEGORY_ID = "28"           # Science & Technology
+YOUTUBE_DEFAULT_LANGUAGE = "en"
+YOUTUBE_DEFAULT_TAGS = ["AI agents", "Moltbook", "Odd Essentials"]
+YOUTUBE_DISCLAIMER = (
+    "\n\n---\nThis is AI-generated editorial commentary on agent-ecosystem "
+    "activity. Hosts are synthetic; voices, animations, and narration are "
+    "produced from a structured script. Not a record of human events."
+)
+
+
+def stitch_episode(*, manifest_path: Path, overwrite: bool = False) -> Path:
+    """Concatenate per-segment clips into a single MP4 via ffmpeg concat demuxer.
+
+    Re-encodes with fixed libx264/aac params (deterministic given the same
+    inputs and same ffmpeg build). Stream copy would be faster but is
+    fragile across slight Hedra clip variations.
+    """
+    manifest = _read_manifest(manifest_path)
+    eid = manifest["id"]
+    segments = manifest["segments"]
+    if any(s.get("clip_status") != "complete" or not s.get("clip_path") for s in segments):
+        raise RuntimeError("not all segments are complete — refusing to stitch")
+
+    final_path = episode_dir(eid) / "final.mp4"
+    if final_path.exists() and not overwrite:
+        raise FileExistsError(f"{final_path} exists. Pass overwrite=True to replace.")
+
+    list_path = episode_dir(eid) / "concat.txt"
+    concat_text = "\n".join(
+        f"file '{(REPO_ROOT / s['clip_path']).resolve()}'" for s in segments
+    ) + "\n"
+    list_path.write_text(concat_text)
+
+    cmd = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel", "warning",
+        "-y",
+        "-f", "concat",
+        "-safe", "0",
+        "-i", str(list_path),
+        "-c:v", "libx264",
+        "-preset", "medium",
+        "-crf", "18",
+        "-pix_fmt", "yuv420p",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-ar", "48000",
+        "-ac", "2",
+        "-movflags", "+faststart",
+        str(final_path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg stitch failed:\nSTDERR:\n{proc.stderr}")
+    return final_path
+
+
+def validate_stitched_output(final_path: Path, expected_total_sec: float) -> None:
+    """Apply post-stitch validation gates. Raises on failure."""
+    if not final_path.exists():
+        raise RuntimeError(f"final missing: {final_path}")
+    meta = ffprobe_streams(final_path)
+    streams = meta.get("streams", [])
+    video = [s for s in streams if s.get("codec_type") == "video"]
+    audio = [s for s in streams if s.get("codec_type") == "audio"]
+    if len(video) != 1:
+        raise RuntimeError(f"expected exactly 1 video stream, got {len(video)}: {final_path}")
+    if len(audio) != 1:
+        raise RuntimeError(f"expected exactly 1 audio stream, got {len(audio)}: {final_path}")
+
+    v = video[0]
+    if int(v["width"]) != 1280 or int(v["height"]) != 720:
+        raise RuntimeError(f"final not 1280x720: {v['width']}x{v['height']}")
+    if v.get("codec_name") != "h264":
+        raise RuntimeError(f"final video codec {v.get('codec_name')!r} != h264")
+    if audio[0].get("codec_name") != "aac":
+        raise RuntimeError(f"final audio codec {audio[0].get('codec_name')!r} != aac")
+
+    total_sec = float(meta["format"]["duration"])
+    if not EPISODE_DURATION_MIN_SEC <= total_sec <= EPISODE_DURATION_MAX_SEC:
+        raise RuntimeError(
+            f"final duration {total_sec:.2f}s out of bounds "
+            f"[{EPISODE_DURATION_MIN_SEC}, {EPISODE_DURATION_MAX_SEC}]"
+        )
+    delta = abs(total_sec - expected_total_sec)
+    if delta > STITCH_DURATION_TOLERANCE_SEC:
+        raise RuntimeError(
+            f"final duration {total_sec:.2f}s vs expected {expected_total_sec:.2f}s "
+            f"differs by {delta:.2f}s > tolerance {STITCH_DURATION_TOLERANCE_SEC}s"
+        )
+
+
+def cmd_stitch(args: argparse.Namespace) -> int:
+    eid = args.episode_id
+    manifest_path = episode_dir(eid) / "manifest.json"
+    if not manifest_path.exists():
+        print(f"manifest missing at {manifest_path}", file=sys.stderr)
+        return 2
+    manifest = _read_manifest(manifest_path)
+
+    expected_total = 0.0
+    for s in manifest["segments"]:
+        meta = ffprobe_streams(REPO_ROOT / s["clip_path"])
+        expected_total += float(meta["format"]["duration"])
+
+    print(f"Stitching {len(manifest['segments'])} clips (expected total ≈ {expected_total:.2f}s)...")
+    final_path = stitch_episode(manifest_path=manifest_path, overwrite=args.force)
+    print(f"Stitched: {final_path}")
+    validate_stitched_output(final_path, expected_total)
+    print("Validation OK")
+
+    manifest = _read_manifest(manifest_path)
+    manifest["stitched_path"] = str(final_path.relative_to(REPO_ROOT))
+    manifest["validation_status"] = "stitched"
+    _write_manifest(manifest_path, manifest)
+    print("validation_status=stitched")
+    return 0
+
+
+# ---- SRT generation -------------------------------------------------------
+
+def _format_srt_timestamp(sec: float) -> str:
+    if sec < 0:
+        sec = 0.0
+    h = int(sec // 3600)
+    m = int((sec % 3600) // 60)
+    s = int(sec % 60)
+    ms = int(round((sec - int(sec)) * 1000))
+    if ms == 1000:
+        ms = 999
+    return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+
+def generate_srt(*, manifest_path: Path) -> Path:
+    """Build an SRT from per-segment audio durations.
+
+    Cue timestamps come from cumulative audio durations (ffprobe). The cue
+    text is the segment's `text` field. One cue per segment — the script
+    is already conversational and segment-sized, no further splitting is
+    needed for an audio-only caption track.
+    """
+    manifest = _read_manifest(manifest_path)
+    eid = manifest["id"]
+    segments = manifest["segments"]
+    if any(s.get("audio_status") != "complete" or not s.get("audio_path") for s in segments):
+        raise RuntimeError("not all segments have audio — refusing to build SRT")
+
+    cues = []
+    cursor = 0.0
+    for i, seg in enumerate(segments):
+        audio_meta = ffprobe_streams(REPO_ROOT / seg["audio_path"])
+        dur = float(audio_meta["format"]["duration"])
+        start = cursor
+        end = cursor + dur
+        cues.append(
+            f"{i + 1}\n"
+            f"{_format_srt_timestamp(start)} --> {_format_srt_timestamp(end)}\n"
+            f"{seg['text']}\n"
+        )
+        cursor = end
+
+    srt_path = episode_dir(eid) / "captions.srt"
+    srt_path.write_text("\n".join(cues), encoding="utf-8")
+    return srt_path
+
+
+# ---- YouTube upload -------------------------------------------------------
+
+YOUTUBE_TOKEN_SECTION_HEADER = "# youtube_tokens"
+
+
+def load_youtube_credentials():
+    """Build a google.oauth2 Credentials from the refresh token in .keys."""
+    from google.oauth2.credentials import Credentials  # local import — heavy SDK
+    text = _load_podcast_keys_text()
+    if YOUTUBE_TOKEN_SECTION_HEADER not in text:
+        raise SystemExit(
+            "YouTube tokens not found in .keys. Run scripts/youtube_consent.py first."
+        )
+    section = text.split(YOUTUBE_TOKEN_SECTION_HEADER, 1)[1].strip()
+    payload = json.loads(section)
+    return Credentials(
+        token=None,
+        refresh_token=payload["refresh_token"],
+        client_id=payload["client_id"],
+        client_secret=payload["client_secret"],
+        token_uri=payload["token_uri"],
+        scopes=payload.get("scopes"),
+    )
+
+
+def upload_youtube_video(
+    *,
+    credentials,
+    video_path: Path,
+    title: str,
+    description: str,
+    tags: list[str],
+    visibility: str = DEFAULT_VISIBILITY,
+) -> str:
+    """Resumable upload to YouTube. Returns the videoId."""
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+
+    youtube = build("youtube", "v3", credentials=credentials, cache_discovery=False)
+    body = {
+        "snippet": {
+            "title": title,
+            "description": description,
+            "tags": tags,
+            "categoryId": YOUTUBE_CATEGORY_ID,
+            "defaultLanguage": YOUTUBE_DEFAULT_LANGUAGE,
+            "defaultAudioLanguage": YOUTUBE_DEFAULT_LANGUAGE,
+        },
+        "status": {
+            "privacyStatus": visibility,
+            "selfDeclaredMadeForKids": False,
+            "embeddable": True,
+        },
+    }
+    media = MediaFileUpload(str(video_path), chunksize=8 * 1024 * 1024, resumable=True, mimetype="video/mp4")
+    request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
+
+    response = None
+    while response is None:
+        status, response = request.next_chunk()
+        if status:
+            print(f"    upload progress: {int(status.progress() * 100)}%")
+    return response["id"]
+
+
+def upload_youtube_caption(*, credentials, video_id: str, srt_path: Path, language: str = YOUTUBE_DEFAULT_LANGUAGE) -> str:
+    """Upload an SRT as a caption track for `video_id`. Returns the caption id."""
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+
+    youtube = build("youtube", "v3", credentials=credentials, cache_discovery=False)
+    body = {
+        "snippet": {
+            "videoId": video_id,
+            "language": language,
+            "name": "English",
+            "isDraft": False,
+        }
+    }
+    media = MediaFileUpload(str(srt_path), mimetype="application/octet-stream", resumable=False)
+    resp = youtube.captions().insert(part="snippet", body=body, media_body=media).execute()
+    return resp["id"]
+
+
+def verify_youtube_video(*, credentials, video_id: str) -> dict[str, Any]:
+    """Confirm the upload via videos.list. Returns the snippet+status payload."""
+    from googleapiclient.discovery import build
+    youtube = build("youtube", "v3", credentials=credentials, cache_discovery=False)
+    resp = youtube.videos().list(part="id,snippet,status", id=video_id).execute()
+    items = resp.get("items", [])
+    if not items:
+        raise RuntimeError(f"videos.list found no item for id={video_id}")
+    return items[0]
+
+
+def cmd_upload(args: argparse.Namespace) -> int:
+    eid = args.episode_id
+    manifest_path = episode_dir(eid) / "manifest.json"
+    if not manifest_path.exists():
+        print(f"manifest missing at {manifest_path}", file=sys.stderr)
+        return 2
+    manifest = _read_manifest(manifest_path)
+    if not manifest.get("stitched_path"):
+        print("stitched_path missing — run stitch first.", file=sys.stderr)
+        return 2
+
+    final_path = REPO_ROOT / manifest["stitched_path"]
+    if not final_path.exists():
+        print(f"stitched file missing: {final_path}", file=sys.stderr)
+        return 2
+
+    print("Generating SRT from segment timing...")
+    srt_path = generate_srt(manifest_path=manifest_path)
+    print(f"  SRT: {srt_path} ({srt_path.stat().st_size} bytes)")
+
+    print("Loading YouTube credentials...")
+    creds = load_youtube_credentials()
+
+    visibility = manifest.get("visibility", DEFAULT_VISIBILITY)
+    video_id = manifest.get("youtube_id")
+
+    if video_id:
+        print(f"manifest already records youtube_id={video_id!r}; skipping video upload.")
+        record = verify_youtube_video(credentials=creds, video_id=video_id)
+        print(f"  privacyStatus: {record['status']['privacyStatus']!r}")
+        print(f"  uploadStatus:  {record['status'].get('uploadStatus')!r}")
+        if record["status"]["privacyStatus"] != visibility:
+            raise RuntimeError(
+                f"privacyStatus on YouTube ({record['status']['privacyStatus']!r}) "
+                f"does not match requested {visibility!r}"
+            )
+    else:
+        title = manifest["script"]["title"]
+        description = manifest["script"]["description"] + YOUTUBE_DISCLAIMER
+        print(f"Uploading video to YouTube ({visibility}): title={title!r}")
+        video_id = upload_youtube_video(
+            credentials=creds,
+            video_path=final_path,
+            title=title,
+            description=description,
+            tags=YOUTUBE_DEFAULT_TAGS,
+            visibility=visibility,
+        )
+        print(f"  videoId: {video_id}")
+        manifest = _read_manifest(manifest_path)
+        manifest["youtube_id"] = video_id
+        manifest["validation_status"] = "video_uploaded"
+        _write_manifest(manifest_path, manifest)
+
+        print("Verifying via videos.list...")
+        record = verify_youtube_video(credentials=creds, video_id=video_id)
+        print(f"  privacyStatus: {record['status']['privacyStatus']!r}")
+        print(f"  uploadStatus:  {record['status'].get('uploadStatus')!r}")
+        if record["status"]["privacyStatus"] != visibility:
+            raise RuntimeError(
+                f"privacyStatus on YouTube ({record['status']['privacyStatus']!r}) "
+                f"does not match requested {visibility!r}"
+            )
+
+    if manifest.get("youtube_caption_id"):
+        print(f"manifest already records youtube_caption_id; skipping caption upload.")
+    else:
+        print("Uploading caption track...")
+        caption_id = upload_youtube_caption(credentials=creds, video_id=video_id, srt_path=srt_path)
+        print(f"  caption id: {caption_id}")
+        manifest = _read_manifest(manifest_path)
+        manifest["youtube_caption_id"] = caption_id
+        _write_manifest(manifest_path, manifest)
+
+    manifest = _read_manifest(manifest_path)
+    cast = load_cast()
+    final_meta = ffprobe_streams(REPO_ROOT / manifest["stitched_path"])
+    duration_min = max(1, int(round(float(final_meta["format"]["duration"]) / 60.0)))
+    record = EpisodeRecord(
+        id=eid,
+        episodeNo=int(manifest["episode_no"]),
+        title=manifest["script"]["title"],
+        date=manifest["run_date"],
+        durationMinutes=duration_min,
+        youtubeId=manifest["youtube_id"],
+        description=manifest["script"]["description"],
+        hosts=derive_hosts(EpisodeScript.model_validate(manifest["script"]), cast),
+    )
+    manifest["episode_record"] = record.model_dump()
+    manifest["validation_status"] = "uploaded"
+    _write_manifest(manifest_path, manifest)
+    print("validation_status=uploaded")
+    print(f"Episode record (matches SPA Episode shape): {record.model_dump()}")
+    print(f"YouTube URL: https://www.youtube.com/watch?v={video_id}")
+    return 0
+
+
 def cmd_produce_segments(args: argparse.Namespace) -> int:
     """Canary-then-scale TTS + Hedra clip generation across all manifest segments.
 
@@ -1038,6 +1417,19 @@ def main(argv: list[str] | None = None) -> int:
         help="Parallel workers for non-canary segments (default 4).",
     )
 
+    p_stitch = sub.add_parser(
+        "stitch",
+        help="Concat per-segment clips into final.mp4 + ffprobe validate.",
+    )
+    p_stitch.add_argument("--episode-id", default="ep-001")
+    p_stitch.add_argument("--force", action="store_true", help="Overwrite final.mp4 if it exists.")
+
+    p_up = sub.add_parser(
+        "upload",
+        help="Generate SRT, upload final.mp4 to YouTube unlisted, verify, upload captions.",
+    )
+    p_up.add_argument("--episode-id", default="ep-001")
+
     args = parser.parse_args(argv)
     if args.cmd == "show-corpus":
         return cmd_show_corpus(args)
@@ -1045,6 +1437,10 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_generate_script(args)
     if args.cmd == "produce-segments":
         return cmd_produce_segments(args)
+    if args.cmd == "stitch":
+        return cmd_stitch(args)
+    if args.cmd == "upload":
+        return cmd_upload(args)
     parser.error(f"unknown command {args.cmd!r}")
     return 2
 
