@@ -51,6 +51,13 @@ STITCH_DURATION_TOLERANCE_SEC = 2.0
 # headroom over the worst case before declaring the generation hung.
 HEDRA_POLL_TIMEOUT_SEC = 1800.0
 
+# Per-segment retry budget. Phase 0b raised on first failure; Phase 1
+# bounds retries so transient TTS / Hedra / network blips don't blow the
+# whole episode. Idempotency in process_segment ensures completed
+# sub-steps (audio written, clip rendered) are reused across attempts —
+# we don't pay the full cost on every retry.
+SEGMENT_MAX_ATTEMPTS = 3
+
 YOUTUBE_CATEGORY_ID = "28"           # Science & Technology
 YOUTUBE_DEFAULT_LANGUAGE = "en"
 YOUTUBE_DEFAULT_TAGS = ["AI agents", "Moltbook", "Odd Essentials"]

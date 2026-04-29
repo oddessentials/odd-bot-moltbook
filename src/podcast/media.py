@@ -12,8 +12,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from .config import REPO_ROOT
-from .manifest import episode_dir, read_manifest
+from .manifest import read_manifest, resolve_inside_episode
 
 
 def ffprobe_streams(path: Path) -> dict[str, Any]:
@@ -76,7 +75,6 @@ def generate_srt(*, manifest_path: Path) -> Path:
     needed for an audio-only caption track.
     """
     manifest = read_manifest(manifest_path)
-    eid = manifest["id"]
     segments = manifest["segments"]
     if any(s.get("audio_status") != "complete" or not s.get("audio_path") for s in segments):
         raise RuntimeError("not all segments have audio — refusing to build SRT")
@@ -84,7 +82,11 @@ def generate_srt(*, manifest_path: Path) -> Path:
     cues = []
     cursor = 0.0
     for i, seg in enumerate(segments):
-        audio_meta = ffprobe_streams(REPO_ROOT / seg["audio_path"])
+        audio_path = resolve_inside_episode(
+            manifest_path=manifest_path,
+            recorded_rel=seg.get("audio_path"),
+        )
+        audio_meta = ffprobe_streams(audio_path)
         dur = float(audio_meta["format"]["duration"])
         start = cursor
         end = cursor + dur
@@ -95,6 +97,9 @@ def generate_srt(*, manifest_path: Path) -> Path:
         )
         cursor = end
 
-    srt_path = episode_dir(eid) / "captions.srt"
+    # SRT is written next to the manifest (operator-supplied filesystem
+    # location), not at episode_dir(manifest["id"]) — the manifest field
+    # is mutable and cannot direct an output write.
+    srt_path = manifest_path.parent / "captions.srt"
     srt_path.write_text("\n".join(cues), encoding="utf-8")
     return srt_path

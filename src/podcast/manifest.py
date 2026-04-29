@@ -10,13 +10,15 @@ in-process concurrent updates from the parallel-segment producer.
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import json
 import os
 import tempfile
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from .cast import cast_config_hash
 from .config import (
@@ -26,11 +28,103 @@ from .config import (
     EPISODES_PUBLIC_PATH,
     HEDRA_MODEL,
     HEDRA_MODEL_ID,
+    LOCK_PATH,
+    REPO_ROOT,
     RESOLUTION,
     SCRIPT_MODEL,
     TTS_MODEL,
 )
 from .schema import BriefSummary, CastConfig, EpisodeScript
+
+
+class EpisodeBoundaryError(ValueError):
+    """Raised by `resolve_inside_episode` when a manifest-recorded path
+    resolves outside the manifest's episode directory.
+
+    Typed so callers (cmd_upload, generate_srt, stitch_episode, etc.)
+    can distinguish a sandbox violation from other ValueErrors and
+    refuse the operation rather than crash with a generic error.
+    """
+
+
+def resolve_inside_episode(
+    *,
+    manifest_path: Path,
+    recorded_rel: str | None,
+    repo_root: Path | None = None,
+) -> Path:
+    """Resolve a manifest-recorded path against `repo_root` and confirm
+    it lies inside the manifest's episode directory.
+
+    The episode directory is `manifest_path.parent` — the operator-
+    supplied filesystem location, not anything pulled from manifest
+    contents. Recorded paths must be relative and must not escape via
+    `..` segments, absolute paths, or symlinks pointing out of the
+    episode subtree.
+
+    `repo_root` defaults to the module-level REPO_ROOT, looked up at
+    call time so tests can patch `manifest.REPO_ROOT` without
+    re-importing.
+
+    Returns the canonical resolved Path on success. Raises
+    EpisodeBoundaryError on:
+      - empty / None recorded_rel
+      - resolution outside manifest_path.parent (after `..` collapsing
+        and symlink following)
+    """
+    if not recorded_rel:
+        raise EpisodeBoundaryError(
+            f"empty recorded path under {manifest_path.parent}"
+        )
+    if "\n" in recorded_rel or "\r" in recorded_rel:
+        raise EpisodeBoundaryError(
+            f"recorded path contains a newline: {recorded_rel!r}"
+        )
+    effective_root = repo_root if repo_root is not None else REPO_ROOT
+    candidate = (effective_root / recorded_rel).resolve(strict=False)
+    candidate_str = str(candidate)
+    if "\n" in candidate_str or "\r" in candidate_str:
+        # Path.resolve() doesn't strip newlines; defense in depth so the
+        # final string we hand off to subprocess argv / quoted file lists
+        # / SRT cues can never carry a directive separator.
+        raise EpisodeBoundaryError(
+            f"resolved path contains a newline: {candidate!r}"
+        )
+    boundary = manifest_path.parent.resolve(strict=False)
+    if not candidate.is_relative_to(boundary):
+        raise EpisodeBoundaryError(
+            f"recorded path {recorded_rel!r} resolves to {candidate} "
+            f"which escapes episode boundary {boundary}"
+        )
+    return candidate
+
+
+@contextlib.contextmanager
+def acquire_run_lock(path: Path = LOCK_PATH) -> Iterator[None]:
+    """Process-exclusive non-blocking flock at the podcast lock path.
+
+    Mirrors src/publish.py's acquire_lock pattern. Yields on acquisition;
+    raises BlockingIOError if the lock is held by another process. Caller
+    is expected to catch BlockingIOError at the CLI boundary and exit 0
+    cleanly (sibling run in progress).
+
+    Lock is auto-released by the kernel on process death, so no stale-lock
+    recovery is needed.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(path), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        try:
+            os.close(fd)
+        except OSError:
+            pass
 
 
 def episode_dir(episode_id: str) -> Path:
@@ -105,6 +199,42 @@ def update_segment_state(manifest_path: Path, idx: int, **fields: Any) -> dict[s
         seg.update(fields)
         write_manifest(manifest_path, manifest)
         return seg
+
+
+# Ordered phase markers. Only advances are written by `advance_validation_status`
+# so that re-running an earlier phase (e.g., produce-segments after the episode
+# already uploaded) doesn't roll back a later phase's completion marker.
+VALIDATION_STATUS_ORDER: tuple[str, ...] = (
+    "script_generated",
+    "segments_complete",
+    "stitched",
+    "video_uploaded",
+    "uploaded",
+)
+
+
+def advance_validation_status(manifest_path: Path, target: str) -> str:
+    """Set `validation_status` to `target` only if `target` is at or past the
+    current state in `VALIDATION_STATUS_ORDER`. Returns the resulting status
+    so callers can log what actually landed.
+
+    Raises ValueError if `target` is not a known phase marker.
+    """
+    if target not in VALIDATION_STATUS_ORDER:
+        raise ValueError(f"unknown validation_status: {target!r}")
+    target_idx = VALIDATION_STATUS_ORDER.index(target)
+    with _MANIFEST_LOCK:
+        manifest = read_manifest(manifest_path)
+        current = manifest.get("validation_status")
+        try:
+            current_idx = VALIDATION_STATUS_ORDER.index(current) if current else -1
+        except ValueError:
+            current_idx = -1
+        if target_idx > current_idx:
+            manifest["validation_status"] = target
+            write_manifest(manifest_path, manifest)
+            return target
+        return current  # type: ignore[return-value]
 
 
 def write_initial_manifest(

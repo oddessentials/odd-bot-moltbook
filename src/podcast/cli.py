@@ -20,6 +20,7 @@ from .config import (
     DEFAULT_VISIBILITY,
     REPO_ROOT,
     SCRIPT_MODEL,
+    SEGMENT_MAX_ATTEMPTS,
     YOUTUBE_DEFAULT_TAGS,
     YOUTUBE_DISCLAIMER,
 )
@@ -31,18 +32,22 @@ from .keys import (
     load_youtube_credentials,
 )
 from .manifest import (
+    EpisodeBoundaryError,
+    acquire_run_lock,
+    advance_validation_status,
     derive_episode_no,
     derive_hosts,
     episode_dir,  # noqa: F401  -- used by cmd_generate_script via --force cleanup
     manifest_path_for,
     read_manifest,
+    resolve_inside_episode,
     write_initial_manifest,
     write_manifest,
 )
 from .media import ffprobe_streams, generate_srt
 from .schema import EpisodeRecord, EpisodeScript
 from .scripting import generate_episode_script
-from .segments import process_segment
+from .segments import process_segment_with_retry
 from .stitch import stitch_episode, validate_stitched_output
 from .youtube import (
     resume_youtube_upload,
@@ -107,9 +112,11 @@ def cmd_produce_segments(args: argparse.Namespace) -> int:
     """Canary-then-scale TTS + Hedra clip generation across all manifest segments.
 
     Segment 0 runs as the canary. If its objective gates pass, segments
-    1..N-1 run with the same gates. Any segment failure aborts the run
-    with the manifest left in whatever partial state it reached — the
-    next invocation can reuse already-complete segments.
+    1..N-1 run with the same gates. Each segment runs under a bounded
+    retry budget (default SEGMENT_MAX_ATTEMPTS); any segment failure
+    after the budget is exhausted aborts the run with the manifest left
+    in whatever partial state it reached — the next invocation reuses
+    already-complete segments.
     """
     eid = args.episode_id
     mpath = manifest_path_for(eid)
@@ -117,36 +124,42 @@ def cmd_produce_segments(args: argparse.Namespace) -> int:
         print(f"manifest missing at {mpath} — run generate-script first.", file=sys.stderr)
         return 2
 
+    if args.max_attempts is None:
+        args.max_attempts = SEGMENT_MAX_ATTEMPTS
+
     manifest = read_manifest(mpath)
     segments = manifest["segments"]
     n = len(segments)
-    print(f"Producing {n} segment(s) for episode {eid}")
+    print(f"Producing {n} segment(s) for episode {eid} (max_attempts={args.max_attempts})")
 
     cast = load_cast()
     e_key = load_elevenlabs_key()
     h_session = hedra_session(load_hedra_key())
 
     print("Canary: segment 0...")
-    process_segment(
+    process_segment_with_retry(
         manifest_path=mpath, idx=0, cast=cast,
         elevenlabs_key=e_key, hedra_session=h_session,
+        max_attempts=args.max_attempts,
     )
     print("Canary green. Scaling to remaining segments in parallel...")
 
     parallel_workers = min(args.parallel, max(1, n - 1))
     if parallel_workers <= 1 or n <= 2:
         for idx in range(1, n):
-            process_segment(
+            process_segment_with_retry(
                 manifest_path=mpath, idx=idx, cast=cast,
                 elevenlabs_key=e_key, hedra_session=h_session,
+                max_attempts=args.max_attempts,
             )
     else:
         with ThreadPoolExecutor(max_workers=parallel_workers) as ex:
             futures = {
                 ex.submit(
-                    process_segment,
+                    process_segment_with_retry,
                     manifest_path=mpath, idx=idx, cast=cast,
                     elevenlabs_key=e_key, hedra_session=h_session,
+                    max_attempts=args.max_attempts,
                 ): idx
                 for idx in range(1, n)
             }
@@ -158,10 +171,8 @@ def cmd_produce_segments(args: argparse.Namespace) -> int:
                     print(f"  seg{idx:02d}: FAILED — {e}", file=sys.stderr)
                     raise
 
-    manifest = read_manifest(mpath)
-    manifest["validation_status"] = "segments_complete"
-    write_manifest(mpath, manifest)
-    print(f"All {n} segments complete. validation_status=segments_complete")
+    landed = advance_validation_status(mpath, "segments_complete")
+    print(f"All {n} segments complete. validation_status={landed}")
     return 0
 
 
@@ -173,9 +184,44 @@ def cmd_stitch(args: argparse.Namespace) -> int:
         return 2
     manifest = read_manifest(mpath)
 
+    completed_states = ("stitched", "video_uploaded", "uploaded")
+    stitched_path_str = manifest.get("stitched_path")
+    if (
+        not args.force
+        and manifest.get("validation_status") in completed_states
+        and stitched_path_str
+    ):
+        try:
+            stitched_abs = resolve_inside_episode(
+                manifest_path=mpath, recorded_rel=stitched_path_str,
+            )
+        except EpisodeBoundaryError as e:
+            print(
+                f"refusing to honor stitched_path skip — {e}",
+                file=sys.stderr,
+            )
+            return 2
+        if stitched_abs.exists():
+            print(
+                f"final.mp4 already stitched at {stitched_path_str} "
+                f"(validation_status={manifest.get('validation_status')!r}); skipping. "
+                "Pass --force to re-stitch."
+            )
+            return 0
+
     expected_total = 0.0
     for s in manifest["segments"]:
-        meta = ffprobe_streams(REPO_ROOT / s["clip_path"])
+        try:
+            clip_path = resolve_inside_episode(
+                manifest_path=mpath, recorded_rel=s.get("clip_path"),
+            )
+        except EpisodeBoundaryError as e:
+            print(
+                f"refusing to ffprobe segment clip — {e}",
+                file=sys.stderr,
+            )
+            return 2
+        meta = ffprobe_streams(clip_path)
         expected_total += float(meta["format"]["duration"])
 
     print(f"Stitching {len(manifest['segments'])} clips (expected total ≈ {expected_total:.2f}s)...")
@@ -186,9 +232,9 @@ def cmd_stitch(args: argparse.Namespace) -> int:
 
     manifest = read_manifest(mpath)
     manifest["stitched_path"] = str(final_path.relative_to(REPO_ROOT))
-    manifest["validation_status"] = "stitched"
     write_manifest(mpath, manifest)
-    print("validation_status=stitched")
+    landed = advance_validation_status(mpath, "stitched")
+    print(f"validation_status={landed}")
     return 0
 
 
@@ -203,7 +249,13 @@ def cmd_upload(args: argparse.Namespace) -> int:
         print("stitched_path missing — run stitch first.", file=sys.stderr)
         return 2
 
-    final_path = REPO_ROOT / manifest["stitched_path"]
+    try:
+        final_path = resolve_inside_episode(
+            manifest_path=mpath, recorded_rel=manifest.get("stitched_path"),
+        )
+    except EpisodeBoundaryError as e:
+        print(f"refusing to upload — {e}", file=sys.stderr)
+        return 2
     if not final_path.exists():
         print(f"stitched file missing: {final_path}", file=sys.stderr)
         return 2
@@ -277,8 +329,8 @@ def cmd_upload(args: argparse.Namespace) -> int:
             print(f"  videoId: {video_id}")
             manifest = read_manifest(mpath)
             manifest["youtube_id"] = video_id
-            manifest["validation_status"] = "video_uploaded"
             write_manifest(mpath, manifest)
+            advance_validation_status(mpath, "video_uploaded")
 
         print("Verifying via videos.list...")
         record = verify_youtube_video(credentials=creds, video_id=video_id)
@@ -302,7 +354,7 @@ def cmd_upload(args: argparse.Namespace) -> int:
 
     manifest = read_manifest(mpath)
     cast = load_cast()
-    final_meta = ffprobe_streams(REPO_ROOT / manifest["stitched_path"])
+    final_meta = ffprobe_streams(final_path)
     duration_min = max(1, int(round(float(final_meta["format"]["duration"]) / 60.0)))
     record = EpisodeRecord(
         id=eid,
@@ -315,12 +367,69 @@ def cmd_upload(args: argparse.Namespace) -> int:
         hosts=derive_hosts(EpisodeScript.model_validate(manifest["script"]), cast),
     )
     manifest["episode_record"] = record.model_dump()
-    manifest["validation_status"] = "uploaded"
     write_manifest(mpath, manifest)
-    print("validation_status=uploaded")
+    landed = advance_validation_status(mpath, "uploaded")
+    print(f"validation_status={landed}")
     print(f"Episode record (matches SPA Episode shape): {record.model_dump()}")
     print(f"YouTube URL: https://www.youtube.com/watch?v={video_id}")
     return 0
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    """Walk the full pipeline and skip phases that are already done.
+
+    Single entry point for the steady-state invocation: idempotent across
+    all four phases (script → segments → stitch → upload). The operator
+    can run this from any partial state and the engine catches up to a
+    fully published episode (still unlisted in Phase 0; the public flip
+    is Phase 2's publish-event work).
+
+    Lock is held for the entire pipeline run via main()'s dispatcher
+    wrapper, so per-phase calls never re-acquire.
+    """
+    eid = args.episode_id
+    mpath = manifest_path_for(eid)
+
+    # Phase 1: generate-script (refuses to clobber unless --force).
+    if mpath.exists() and not args.force:
+        print(f"[run] manifest exists at {mpath}; skipping generate-script.")
+    else:
+        rc = cmd_generate_script(
+            argparse.Namespace(
+                episode_id=eid,
+                episode_no=args.episode_no,
+                run_date=args.run_date,
+                force=args.force,
+            )
+        )
+        if rc != 0:
+            return rc
+
+    # Phase 2: produce-segments. Always invoked — even if validation_status
+    # is already segments_complete or beyond, we still need each segment's
+    # process_segment idempotency-skip path to re-run validate_segment_outputs
+    # against the artifacts on disk. Skipping based on validation_status
+    # alone would let an out-of-band corruption (file deleted, partial
+    # overwrite, manifest tampering) bypass the gate. The re-validation is
+    # cheap (~100ms per already-complete segment) and process_segment
+    # short-circuits without touching ElevenLabs/Hedra when the gates pass.
+    rc = cmd_produce_segments(
+        argparse.Namespace(
+            episode_id=eid,
+            parallel=args.parallel,
+            max_attempts=args.max_attempts,
+        )
+    )
+    if rc != 0:
+        return rc
+
+    # Phase 3: stitch. cmd_stitch is idempotent for non-forced runs.
+    rc = cmd_stitch(argparse.Namespace(episode_id=eid, force=False))
+    if rc != 0:
+        return rc
+
+    # Phase 4: upload. Already idempotent on youtube_id + youtube_caption_id.
+    return cmd_upload(argparse.Namespace(episode_id=eid))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -353,6 +462,12 @@ def main(argv: list[str] | None = None) -> int:
         default=4,
         help="Parallel workers for non-canary segments (default 4).",
     )
+    p_prod.add_argument(
+        "--max-attempts",
+        type=int,
+        default=None,
+        help="Per-segment retry budget (default: SEGMENT_MAX_ATTEMPTS = 3).",
+    )
 
     p_stitch = sub.add_parser(
         "stitch",
@@ -367,16 +482,48 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_up.add_argument("--episode-id", default="ep-001")
 
+    p_run = sub.add_parser(
+        "run",
+        help=(
+            "Walk the full pipeline (generate-script → produce-segments → "
+            "stitch → upload), skipping phases that are already complete. "
+            "Idempotent — safe to invoke from any partial state."
+        ),
+    )
+    p_run.add_argument("--episode-id", default="ep-001")
+    p_run.add_argument("--episode-no", type=int, default=None)
+    p_run.add_argument("--run-date", default=None)
+    p_run.add_argument("--parallel", type=int, default=4)
+    p_run.add_argument("--max-attempts", type=int, default=None)
+    p_run.add_argument(
+        "--force",
+        action="store_true",
+        help="Wipe stale episode dir and restart from scratch.",
+    )
+
     args = parser.parse_args(argv)
     if args.cmd == "show-corpus":
+        # Read-only diagnostic — does not contend with concurrent runs.
         return cmd_show_corpus(args)
-    if args.cmd == "generate-script":
-        return cmd_generate_script(args)
-    if args.cmd == "produce-segments":
-        return cmd_produce_segments(args)
-    if args.cmd == "stitch":
-        return cmd_stitch(args)
-    if args.cmd == "upload":
-        return cmd_upload(args)
-    parser.error(f"unknown command {args.cmd!r}")
-    return 2
+
+    locked_dispatch = {
+        "generate-script": cmd_generate_script,
+        "produce-segments": cmd_produce_segments,
+        "stitch": cmd_stitch,
+        "upload": cmd_upload,
+        "run": cmd_run,
+    }
+    handler = locked_dispatch.get(args.cmd)
+    if handler is None:
+        parser.error(f"unknown command {args.cmd!r}")
+        return 2
+    try:
+        with acquire_run_lock():
+            return handler(args)
+    except BlockingIOError:
+        print(
+            "Another podcast run holds the lock. Exiting cleanly to let the "
+            "sibling finish.",
+            file=sys.stderr,
+        )
+        return 0
