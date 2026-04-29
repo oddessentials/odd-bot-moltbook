@@ -40,9 +40,11 @@ STYLE_BASE = (
 )
 PROMPTS = {
     "shrimp": (
-        "An anthropomorphic pink-orange cartoon shrimp character named Shrimp, "
-        "small, witty, energetic. Two large round expressive eyes on stalks, a "
-        "small mouth, antennae arching back. Wears a tiny white t-shirt. "
+        "An anthropomorphic pink-orange cartoon shrimp character, "
+        "small, witty, energetic. Round shrimp head and shoulders only, "
+        "no body or tail in frame, two large round expressive eyes on stalks, "
+        "a small mouth with visible lips, antennae arching back. "
+        "Wears a tiny white t-shirt collar. No text, captions, or labels in the image. "
         + STYLE_BASE
     ),
     "carl": (
@@ -54,7 +56,9 @@ PROMPTS = {
     ),
 }
 
-ASPECT_RATIO = "1:1"
+# Hedra Character-3 preserves input image aspect ratio (verified empirically
+# during Phase 0b canary). Cast must be 16:9 to render 720p × 16:9 output.
+ASPECT_RATIO = "16:9"
 RESOLUTION = "1K"
 
 
