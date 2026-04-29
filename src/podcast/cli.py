@@ -45,6 +45,7 @@ from .scripting import generate_episode_script
 from .segments import process_segment
 from .stitch import stitch_episode, validate_stitched_output
 from .youtube import (
+    resume_youtube_upload,
     upload_youtube_caption,
     upload_youtube_video,
     verify_youtube_video,
@@ -230,20 +231,54 @@ def cmd_upload(args: argparse.Namespace) -> int:
     else:
         title = manifest["script"]["title"]
         description = manifest["script"]["description"] + YOUTUBE_DISCLAIMER
-        print(f"Uploading video to YouTube ({visibility}): title={title!r}")
-        video_id = upload_youtube_video(
-            credentials=creds,
-            video_path=final_path,
-            title=title,
-            description=description,
-            tags=YOUTUBE_DEFAULT_TAGS,
-            visibility=visibility,
-        )
-        print(f"  videoId: {video_id}")
-        manifest = read_manifest(mpath)
-        manifest["youtube_id"] = video_id
-        manifest["validation_status"] = "video_uploaded"
-        write_manifest(mpath, manifest)
+        saved_session_uri = manifest.get("youtube_upload_session_uri")
+        video_id = None
+        if saved_session_uri:
+            print(
+                f"Found saved resumable session URI; attempting resume from "
+                f"{saved_session_uri[:80]}..."
+            )
+            try:
+                video_id = resume_youtube_upload(
+                    credentials=creds,
+                    video_path=final_path,
+                    session_uri=saved_session_uri,
+                )
+                print(f"  resume succeeded; videoId: {video_id}")
+                manifest = read_manifest(mpath)
+                manifest.pop("youtube_upload_session_uri", None)
+                manifest.pop("youtube_upload_total_bytes", None)
+                manifest["youtube_id"] = video_id
+                manifest["validation_status"] = "video_uploaded"
+                write_manifest(mpath, manifest)
+            except Exception as e:
+                print(
+                    f"  resume failed ({e}); falling back to fresh upload.",
+                    file=sys.stderr,
+                )
+                # Stale session may still be referenced by retries — clear so
+                # the fresh upload below stores a new URI cleanly.
+                manifest = read_manifest(mpath)
+                manifest.pop("youtube_upload_session_uri", None)
+                manifest.pop("youtube_upload_total_bytes", None)
+                write_manifest(mpath, manifest)
+
+        if not video_id:
+            print(f"Uploading video to YouTube ({visibility}): title={title!r}")
+            video_id = upload_youtube_video(
+                credentials=creds,
+                video_path=final_path,
+                title=title,
+                description=description,
+                tags=YOUTUBE_DEFAULT_TAGS,
+                visibility=visibility,
+                manifest_path=mpath,
+            )
+            print(f"  videoId: {video_id}")
+            manifest = read_manifest(mpath)
+            manifest["youtube_id"] = video_id
+            manifest["validation_status"] = "video_uploaded"
+            write_manifest(mpath, manifest)
 
         print("Verifying via videos.list...")
         record = verify_youtube_video(credentials=creds, video_id=video_id)
