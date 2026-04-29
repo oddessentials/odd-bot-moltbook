@@ -123,4 +123,31 @@ fi
 
 "$REPO_ROOT/.venv/bin/python" -m src.podcast run --episode-id "$NEXT_ID"
 
+# Commit + push the public-surface changes so Phase 3's podcast-x-post
+# workflow fires on the push to main. Without this step the cron
+# produces a fully-published episode (data/episodes.json populated,
+# YouTube unlisted, OG page on disk locally) but main never advances,
+# the path-filtered workflow never triggers, and the new episode is
+# never tweeted. cmd_run is idempotent on rerun, so nothing to commit
+# means nothing to push — the `git diff --cached --quiet` gate makes
+# this a no-op when there's no new content.
+git add data/episodes.json docs/podcast
+if git diff --cached --quiet; then
+    echo "  no public-surface changes — nothing to commit, nothing to push."
+else
+    git -c user.email="odd-bot@oddessentials.ai" \
+        -c user.name="odd-bot" \
+        commit -m "chore(podcast): publish $NEXT_ID"
+    if git push origin main; then
+        echo "  pushed; podcast-x-post.yml will fire on the data/episodes.json change."
+    else
+        echo "  WARN: git push failed — public surface is committed locally but"
+        echo "        not on origin. podcast-x-post.yml will NOT fire until the"
+        echo "        commit reaches origin/main. Operator: investigate and"
+        echo "        rerun this wrapper to re-attempt the push (the orchestrator's"
+        echo "        own idempotency means no Anthropic/ElevenLabs/Hedra cost on retry)."
+        exit 1
+    fi
+fi
+
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh finished"
