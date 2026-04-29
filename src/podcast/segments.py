@@ -34,6 +34,7 @@ from .hedra import (
 from .manifest import (
     audio_dir,
     clips_dir,
+    episode_dir,
     read_manifest,
     update_segment_state,
 )
@@ -119,9 +120,26 @@ def validate_segment_outputs(audio_path: Path, clip_path: Path) -> None:
         )
 
 
+def _resolved_under(child: Path, parent: Path) -> bool:
+    """True if `child` resolves to a path inside `parent`.
+
+    Resolution follows symlinks and collapses `..`, so a manifest
+    recording `"../../../etc/passwd"` or an absolute path outside the
+    episode boundary will fail this check. Used as the sandbox guard for
+    manifest-recorded artifact paths.
+    """
+    try:
+        child_resolved = child.resolve(strict=False)
+        parent_resolved = parent.resolve(strict=False)
+    except (OSError, RuntimeError):
+        return False
+    return child_resolved.is_relative_to(parent_resolved)
+
+
 def is_segment_complete_and_valid(
     *,
     manifest_path: Path,
+    episode_id: str,
     seg: dict,
     idx: int,
 ) -> bool:
@@ -129,12 +147,19 @@ def is_segment_complete_and_valid(
 
     Treats the manifest as source of truth for the artifact paths — the
     on-disk files at convention paths are NOT consulted unless the
-    manifest happens to point there. If the manifest-recorded artifacts
-    are present and pass `validate_segment_outputs`, returns True and
-    the caller should short-circuit. If they're recorded but fail
-    validation, the segment's audio/clip status flags are reset to
-    "pending" so the caller falls through to re-render. Otherwise
-    returns False (caller proceeds normally).
+    manifest happens to point there. The recorded paths must additionally
+    resolve INSIDE `data/episodes/<episode_id>/`, so a hand-edited or
+    compromised manifest cannot direct re-validation at unrelated local
+    media via `..`-segments, absolute paths, or escaping symlinks.
+
+    If the manifest-recorded artifacts are present, sandboxed, and pass
+    `validate_segment_outputs`, returns True and the caller should
+    short-circuit. If they fail any of those checks, the segment's
+    audio/clip status flags are reset to "pending" and False is
+    returned so the caller falls through to re-render at convention
+    paths. The single exception: when the recorded paths are simply
+    missing on disk (no escape, no validation failure), statuses are
+    left alone — the caller's re-render will overwrite them.
     """
     if seg.get("audio_status") != "complete" or seg.get("clip_status") != "complete":
         return False
@@ -144,6 +169,22 @@ def is_segment_complete_and_valid(
         return False
     audio_path = REPO_ROOT / audio_rel
     clip_path = REPO_ROOT / clip_rel
+
+    boundary = episode_dir(episode_id)
+    if not _resolved_under(audio_path, boundary) or not _resolved_under(clip_path, boundary):
+        print(
+            f"  seg{idx:02d}: manifest-recorded path escapes {boundary} "
+            f"(audio_path={audio_rel!r}, clip_path={clip_rel!r}); refusing to "
+            "validate, resetting status and re-rendering at convention paths."
+        )
+        update_segment_state(
+            manifest_path,
+            idx,
+            audio_status="pending",
+            clip_status="pending",
+        )
+        return False
+
     if not audio_path.exists() or not clip_path.exists():
         return False
     try:
@@ -190,7 +231,9 @@ def process_segment(
     audio_path = audio_dir(eid) / f"seg{idx:02d}.mp3"
     clip_path = clips_dir(eid) / f"seg{idx:02d}.mp4"
 
-    if is_segment_complete_and_valid(manifest_path=manifest_path, seg=seg, idx=idx):
+    if is_segment_complete_and_valid(
+        manifest_path=manifest_path, episode_id=eid, seg=seg, idx=idx,
+    ):
         return
 
     seg["attempts"] = int(seg.get("attempts", 0)) + 1
