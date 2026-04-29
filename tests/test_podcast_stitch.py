@@ -79,5 +79,56 @@ class TestStitchEpisodeWritePath(unittest.TestCase):
             self.assertEqual(list_arg, str(ep_dir / "concat.txt"))
 
 
+class TestStitchConcatQuoting(unittest.TestCase):
+    def test_apostrophe_in_path_is_escaped_per_ffmpeg_concat_format(self):
+        # A directory legitimately named with an apostrophe (e.g.,
+        # "Pete's stuff") would otherwise terminate the quoted filename
+        # early in concat.txt and let ffmpeg interpret subsequent
+        # characters as a new directive.
+        with tempfile.TemporaryDirectory() as td:
+            tdp = Path(td)
+            ep_dir = tdp / "data" / "episodes" / "Pete's ep"
+            clips_subdir = ep_dir / "clips"
+            clips_subdir.mkdir(parents=True)
+            clip_file = clips_subdir / "seg00.mp4"
+            clip_file.write_bytes(b"clip")
+
+            mpath = ep_dir / "manifest.json"
+            write_manifest(
+                mpath,
+                {
+                    "id": "Pete's ep",
+                    "segments": [
+                        {
+                            "clip_status": "complete",
+                            "clip_path": "data/episodes/Pete's ep/clips/seg00.mp4",
+                        }
+                    ],
+                },
+            )
+
+            class FakeProc:
+                returncode = 0
+                stderr = ""
+                stdout = ""
+
+            from src.podcast import manifest as manifest_module
+
+            with mock.patch.object(manifest_module, "REPO_ROOT", tdp), \
+                 mock.patch.object(subprocess, "run", return_value=FakeProc()):
+                stitch_episode(manifest_path=mpath)
+
+            concat_text = (ep_dir / "concat.txt").read_text()
+            # Per ffmpeg concat docs, embedded single quotes escape as
+            # `'\''` — close-quote, literal apostrophe, reopen-quote.
+            self.assertIn("'\\''", concat_text)
+            # The whole file directive should be on a single line.
+            self.assertEqual(len(concat_text.strip().split("\n")), 1)
+            # And the line still starts with `file '` and ends with `'`.
+            line = concat_text.strip()
+            self.assertTrue(line.startswith("file '"))
+            self.assertTrue(line.endswith("'"))
+
+
 if __name__ == "__main__":
     unittest.main()

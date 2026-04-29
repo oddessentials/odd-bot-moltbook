@@ -76,8 +76,20 @@ def resolve_inside_episode(
         raise EpisodeBoundaryError(
             f"empty recorded path under {manifest_path.parent}"
         )
+    if "\n" in recorded_rel or "\r" in recorded_rel:
+        raise EpisodeBoundaryError(
+            f"recorded path contains a newline: {recorded_rel!r}"
+        )
     effective_root = repo_root if repo_root is not None else REPO_ROOT
     candidate = (effective_root / recorded_rel).resolve(strict=False)
+    candidate_str = str(candidate)
+    if "\n" in candidate_str or "\r" in candidate_str:
+        # Path.resolve() doesn't strip newlines; defense in depth so the
+        # final string we hand off to subprocess argv / quoted file lists
+        # / SRT cues can never carry a directive separator.
+        raise EpisodeBoundaryError(
+            f"resolved path contains a newline: {candidate!r}"
+        )
     boundary = manifest_path.parent.resolve(strict=False)
     if not candidate.is_relative_to(boundary):
         raise EpisodeBoundaryError(

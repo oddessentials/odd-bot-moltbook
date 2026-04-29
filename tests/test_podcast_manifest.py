@@ -15,11 +15,13 @@ import unittest
 from pathlib import Path
 
 from src.podcast.manifest import (
+    EpisodeBoundaryError,
     VALIDATION_STATUS_ORDER,
     advance_validation_status,
     atomic_write_text,
     derive_episode_no,
     derive_hosts,
+    resolve_inside_episode,
     write_manifest,
 )
 from src.podcast.schema import CastConfig, CastMember, EpisodeScript, Segment
@@ -172,6 +174,53 @@ class TestAdvanceValidationStatus(unittest.TestCase):
                 "uploaded",
             ),
         )
+
+
+class TestResolveInsideEpisode(unittest.TestCase):
+    def _setup(self, td: Path) -> Path:
+        ep_dir = td / "data" / "episodes" / "ep-test"
+        ep_dir.mkdir(parents=True)
+        return ep_dir / "manifest.json"
+
+    def test_newline_in_recorded_rel_rejected(self):
+        # The newline could otherwise break a one-directive-per-line
+        # format (ffmpeg concat list) into multiple directives that
+        # ingest unrelated files.
+        with tempfile.TemporaryDirectory() as td:
+            tdp = Path(td)
+            mpath = self._setup(tdp)
+            with self.assertRaises(EpisodeBoundaryError) as cm:
+                resolve_inside_episode(
+                    manifest_path=mpath,
+                    recorded_rel="data/episodes/ep-test/audio/seg00.mp3\nfile '/etc/passwd'",
+                    repo_root=tdp,
+                )
+            self.assertIn("newline", str(cm.exception))
+
+    def test_carriage_return_in_recorded_rel_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            tdp = Path(td)
+            mpath = self._setup(tdp)
+            with self.assertRaises(EpisodeBoundaryError):
+                resolve_inside_episode(
+                    manifest_path=mpath,
+                    recorded_rel="data/episodes/ep-test/audio/seg00.mp3\r;injected",
+                    repo_root=tdp,
+                )
+
+    def test_clean_relative_path_inside_boundary_resolves(self):
+        with tempfile.TemporaryDirectory() as td:
+            tdp = Path(td)
+            mpath = self._setup(tdp)
+            audio = mpath.parent / "audio" / "seg00.mp3"
+            audio.parent.mkdir(parents=True)
+            audio.write_bytes(b"a")
+            resolved = resolve_inside_episode(
+                manifest_path=mpath,
+                recorded_rel="data/episodes/ep-test/audio/seg00.mp3",
+                repo_root=tdp,
+            )
+            self.assertEqual(resolved.resolve(), audio.resolve())
 
 
 class TestAtomicWriteText(unittest.TestCase):

@@ -16,6 +16,13 @@ from .config import (
     STITCH_DURATION_TOLERANCE_SEC,
 )
 from .manifest import read_manifest, resolve_inside_episode
+
+
+def _ffmpeg_concat_escape_single_quotes(s: str) -> str:
+    """Escape single quotes for the ffmpeg concat demuxer's quoted file
+    format. Per ffmpeg docs, an embedded single quote is escaped as
+    `'\\''` (close-quote, literal-quote, reopen-quote)."""
+    return s.replace("'", "'\\''")
 from .media import ffprobe_streams
 
 
@@ -36,13 +43,19 @@ def stitch_episode(*, manifest_path: Path, overwrite: bool = False) -> Path:
 
     list_path = work_dir / "concat.txt"
     # Each clip path is sandboxed to the episode directory before being
-    # written into the concat list — otherwise a tampered manifest could
-    # have ffmpeg ingest unrelated local media.
+    # written into the concat list. resolve_inside_episode also rejects
+    # newlines, which would otherwise let a tampered path break the
+    # one-directive-per-line format and have ffmpeg ingest unrelated
+    # files. Embedded single quotes are escaped per the ffmpeg concat
+    # format's `'\''` rule so a directory legitimately named e.g.
+    # "Pete's stuff" doesn't terminate the quoted filename early.
     safe_clip_paths = [
         resolve_inside_episode(manifest_path=manifest_path, recorded_rel=s.get("clip_path"))
         for s in segments
     ]
-    concat_text = "\n".join(f"file '{p}'" for p in safe_clip_paths) + "\n"
+    concat_text = "\n".join(
+        f"file '{_ffmpeg_concat_escape_single_quotes(str(p))}'" for p in safe_clip_paths
+    ) + "\n"
     list_path.write_text(concat_text)
 
     cmd = [
