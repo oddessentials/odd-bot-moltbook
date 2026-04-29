@@ -77,7 +77,15 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterable
 
+import subprocess
+import threading
+import time
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Literal
+
 import anthropic
+import requests
 import yaml
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
@@ -100,6 +108,20 @@ ASPECT_RATIO = "16:9"
 DEFAULT_VISIBILITY = "unlisted"
 
 ANTHROPIC_KEY_PATH = Path.home() / ".openclaw" / "keys" / "moltbook-engine-anthropic-api-key"
+
+PODCAST_KEYS_FILE = REPO_ROOT / ".keys"
+HEDRA_API_BASE = "https://api.hedra.com/web-app/public"
+ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1"
+
+# Canary gates (objective, applied to every segment).
+EXPECTED_VIDEO_HEIGHT = 720           # 720p
+EXPECTED_ASPECT_RATIO_TOLERANCE = 0.02  # tolerate ±2% on 16:9 = 1.778
+EXPECTED_ASPECT_RATIO = 16 / 9
+TTS_MIN_BYTES = 1024
+TTS_MIN_DURATION_SEC = 2.0
+TTS_MAX_DURATION_SEC = 30.0
+TTS_MIN_MEAN_VOLUME_DB = -55.0   # mean_volume above this counts as non-silent
+CLIP_AUDIO_DURATION_TOLERANCE_SEC = 1.0
 
 
 class CastMember(BaseModel):
@@ -537,6 +559,349 @@ def write_initial_manifest(
     return manifest_path
 
 
+# ---- Key loaders -----------------------------------------------------------
+
+@lru_cache(maxsize=1)
+def _load_podcast_keys_text() -> str:
+    return PODCAST_KEYS_FILE.read_text()
+
+
+def load_elevenlabs_key() -> str:
+    m = re.search(r"^Elevenlabs key:\s*(\S+)", _load_podcast_keys_text(), flags=re.MULTILINE | re.IGNORECASE)
+    if not m:
+        raise SystemExit("ElevenLabs key not found in .keys.")
+    return m.group(1).strip()
+
+
+def load_hedra_key() -> str:
+    m = re.search(r"^Hedra Key:\s*(\S+)", _load_podcast_keys_text(), flags=re.MULTILINE | re.IGNORECASE)
+    if not m:
+        raise SystemExit("Hedra key not found in .keys.")
+    return m.group(1).strip()
+
+
+# ---- Manifest update -------------------------------------------------------
+
+def _read_manifest(manifest_path: Path) -> dict[str, Any]:
+    return json.loads(manifest_path.read_text())
+
+
+def _write_manifest(manifest_path: Path, manifest: dict[str, Any]) -> None:
+    _atomic_write_text(manifest_path, json.dumps(manifest, indent=2) + "\n")
+
+
+_MANIFEST_LOCK = threading.Lock()
+
+
+def update_segment_state(manifest_path: Path, idx: int, **fields: Any) -> dict[str, Any]:
+    with _MANIFEST_LOCK:
+        manifest = _read_manifest(manifest_path)
+        seg = manifest["segments"][idx]
+        seg.update(fields)
+        _write_manifest(manifest_path, manifest)
+        return seg
+
+
+# ---- ffprobe / ffmpeg helpers ---------------------------------------------
+
+def ffprobe_streams(path: Path) -> dict[str, Any]:
+    """Return ffprobe JSON: format + streams. Raises on probe failure."""
+    out = subprocess.check_output(
+        [
+            "ffprobe",
+            "-v", "error",
+            "-print_format", "json",
+            "-show_format",
+            "-show_streams",
+            str(path),
+        ],
+        timeout=30,
+    )
+    return json.loads(out)
+
+
+def ffmpeg_mean_volume_db(path: Path) -> float:
+    """Compute mean_volume in dB via ffmpeg's volumedetect filter."""
+    proc = subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-nostats",
+            "-i", str(path),
+            "-af", "volumedetect",
+            "-f", "null",
+            "-",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    text = proc.stderr or ""
+    m = re.search(r"mean_volume:\s*(-?\d+(?:\.\d+)?)\s*dB", text)
+    if not m:
+        raise RuntimeError(f"could not parse mean_volume from ffmpeg stderr:\n{text[-500:]}")
+    return float(m.group(1))
+
+
+# ---- ElevenLabs TTS --------------------------------------------------------
+
+def _tts_request(text: str, voice_id: str, api_key: str) -> bytes:
+    body = json.dumps({"text": text, "model_id": TTS_MODEL}).encode()
+    req = urllib.request.Request(
+        f"{ELEVENLABS_API_BASE}/text-to-speech/{voice_id}",
+        data=body,
+        method="POST",
+        headers={
+            "xi-api-key": api_key,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=120) as resp:
+        return resp.read()
+
+
+def generate_tts(*, text: str, voice_id: str, out_path: Path, api_key: str) -> Path:
+    audio = _tts_request(text, voice_id, api_key)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_bytes(audio)
+    return out_path
+
+
+# ---- Hedra clip generation -------------------------------------------------
+
+def _hedra_session(api_key: str) -> requests.Session:
+    s = requests.Session()
+    s.headers["x-api-key"] = api_key
+    return s
+
+
+def upload_hedra_audio(s: requests.Session, audio_path: Path) -> str:
+    create = s.post(
+        f"{HEDRA_API_BASE}/assets",
+        json={"name": audio_path.name, "type": "audio"},
+        timeout=30,
+    )
+    create.raise_for_status()
+    asset_id = create.json()["id"]
+    with audio_path.open("rb") as f:
+        up = s.post(f"{HEDRA_API_BASE}/assets/{asset_id}/upload", files={"file": f}, timeout=300)
+    up.raise_for_status()
+    return asset_id
+
+
+def submit_hedra_clip(
+    s: requests.Session,
+    *,
+    image_asset_id: str,
+    audio_asset_id: str,
+    text_prompt: str,
+) -> str:
+    body = {
+        "type": "video",
+        "ai_model_id": HEDRA_MODEL_ID,
+        "start_keyframe_id": image_asset_id,
+        "audio_id": audio_asset_id,
+        "generated_video_inputs": {
+            "text_prompt": text_prompt,
+            "resolution": RESOLUTION,
+            "aspect_ratio": ASPECT_RATIO,
+        },
+    }
+    resp = s.post(f"{HEDRA_API_BASE}/generations", json=body, timeout=60)
+    resp.raise_for_status()
+    return resp.json()["id"]
+
+
+def poll_hedra_clip(s: requests.Session, gen_id: str, *, poll_interval_sec: float = 5.0) -> tuple[str, str]:
+    """Block until the Hedra generation is complete or errored.
+
+    Returns (clip_asset_id, download_url). Raises RuntimeError on error.
+    """
+    while True:
+        st = s.get(f"{HEDRA_API_BASE}/generations/{gen_id}/status", timeout=30)
+        st.raise_for_status()
+        data = st.json()
+        status = data.get("status")
+        if status == "complete":
+            url = data.get("url") or data.get("download_url")
+            asset_id = data.get("asset_id")
+            if not url or not asset_id:
+                raise RuntimeError(f"complete with missing url/asset_id: {data}")
+            return asset_id, url
+        if status == "error":
+            raise RuntimeError(f"Hedra generation {gen_id} errored: {data}")
+        time.sleep(poll_interval_sec)
+
+
+def download_clip(url: str, out_path: Path) -> Path:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with requests.get(url, stream=True, timeout=300) as r:
+        r.raise_for_status()
+        with out_path.open("wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+    return out_path
+
+
+# ---- Per-segment processing + canary validation ---------------------------
+
+def audio_dir(episode_id: str) -> Path:
+    return episode_dir(episode_id) / "audio"
+
+
+def clips_dir(episode_id: str) -> Path:
+    return episode_dir(episode_id) / "clips"
+
+
+def validate_segment_outputs(audio_path: Path, clip_path: Path) -> None:
+    """Apply the canary gates. Raises RuntimeError on any failure.
+
+    Gates (objective):
+      - TTS file exists and is ≥ TTS_MIN_BYTES.
+      - TTS mean_volume above silence threshold.
+      - TTS duration in [TTS_MIN_DURATION_SEC, TTS_MAX_DURATION_SEC].
+      - Clip has both video and audio streams.
+      - Clip resolution ≈ 720p with 16:9 aspect.
+      - Clip duration matches TTS duration ±CLIP_AUDIO_DURATION_TOLERANCE_SEC.
+    """
+    if not audio_path.exists():
+        raise RuntimeError(f"audio missing: {audio_path}")
+    audio_bytes = audio_path.stat().st_size
+    if audio_bytes < TTS_MIN_BYTES:
+        raise RuntimeError(f"audio too small ({audio_bytes} bytes): {audio_path}")
+
+    audio_meta = ffprobe_streams(audio_path)
+    audio_duration_sec = float(audio_meta["format"]["duration"])
+    if not TTS_MIN_DURATION_SEC <= audio_duration_sec <= TTS_MAX_DURATION_SEC:
+        raise RuntimeError(
+            f"audio duration {audio_duration_sec:.2f}s out of bounds "
+            f"[{TTS_MIN_DURATION_SEC}, {TTS_MAX_DURATION_SEC}]"
+        )
+
+    mean_db = ffmpeg_mean_volume_db(audio_path)
+    if mean_db < TTS_MIN_MEAN_VOLUME_DB:
+        raise RuntimeError(
+            f"audio mean_volume {mean_db:.1f} dB below silence threshold "
+            f"{TTS_MIN_MEAN_VOLUME_DB} dB — TTS likely produced silence"
+        )
+
+    if not clip_path.exists():
+        raise RuntimeError(f"clip missing: {clip_path}")
+    clip_meta = ffprobe_streams(clip_path)
+    streams = clip_meta.get("streams", [])
+    video_streams = [s for s in streams if s.get("codec_type") == "video"]
+    audio_streams = [s for s in streams if s.get("codec_type") == "audio"]
+    if not video_streams:
+        raise RuntimeError(f"clip has no video stream: {clip_path}")
+    if not audio_streams:
+        raise RuntimeError(f"clip has no audio stream: {clip_path}")
+
+    v = video_streams[0]
+    width = int(v["width"])
+    height = int(v["height"])
+    if height != EXPECTED_VIDEO_HEIGHT:
+        raise RuntimeError(
+            f"clip height {height} != expected {EXPECTED_VIDEO_HEIGHT}: {clip_path}"
+        )
+    aspect = width / height
+    if abs(aspect - EXPECTED_ASPECT_RATIO) / EXPECTED_ASPECT_RATIO > EXPECTED_ASPECT_RATIO_TOLERANCE:
+        raise RuntimeError(
+            f"clip aspect {aspect:.4f} not 16:9 (within {EXPECTED_ASPECT_RATIO_TOLERANCE * 100:.0f}%): "
+            f"{width}x{height}"
+        )
+
+    clip_duration_sec = float(clip_meta["format"]["duration"])
+    delta = abs(clip_duration_sec - audio_duration_sec)
+    if delta > CLIP_AUDIO_DURATION_TOLERANCE_SEC:
+        raise RuntimeError(
+            f"clip duration {clip_duration_sec:.2f}s vs audio {audio_duration_sec:.2f}s "
+            f"differs by {delta:.2f}s > tolerance {CLIP_AUDIO_DURATION_TOLERANCE_SEC}s"
+        )
+
+
+def process_segment(
+    *,
+    manifest_path: Path,
+    idx: int,
+    cast: CastConfig,
+    elevenlabs_key: str,
+    hedra_session: requests.Session,
+) -> None:
+    """Run TTS + Hedra clip for one segment and update the manifest.
+
+    Idempotent-ish: if both audio and clip files exist on disk and the
+    manifest already records them as complete, skip and return. (Simple
+    resume — full state-machine rigor lands in Phase 1.)
+    """
+    manifest = _read_manifest(manifest_path)
+    seg = manifest["segments"][idx]
+    speaker = seg["speaker"]
+    text = seg["text"]
+    member = cast.cast.get(speaker)
+    if member is None:
+        raise RuntimeError(f"segment {idx} speaker {speaker!r} not in cast {cast.slugs()}")
+
+    eid = manifest["id"]
+    audio_path = audio_dir(eid) / f"seg{idx:02d}.mp3"
+    clip_path = clips_dir(eid) / f"seg{idx:02d}.mp4"
+
+    if (
+        seg.get("audio_status") == "complete"
+        and seg.get("clip_status") == "complete"
+        and audio_path.exists()
+        and clip_path.exists()
+    ):
+        print(f"  seg{idx:02d}: already complete, skipping")
+        return
+
+    seg["attempts"] = int(seg.get("attempts", 0)) + 1
+    update_segment_state(manifest_path, idx, attempts=seg["attempts"])
+
+    print(f"  seg{idx:02d} [{speaker}]: TTS ({len(text.split())} words)...")
+    generate_tts(
+        text=text,
+        voice_id=member.elevenlabs_voice_id,
+        out_path=audio_path,
+        api_key=elevenlabs_key,
+    )
+    update_segment_state(
+        manifest_path, idx,
+        audio_path=str(audio_path.relative_to(REPO_ROOT)),
+        audio_status="complete",
+    )
+
+    print(f"  seg{idx:02d}: uploading audio to Hedra...")
+    audio_asset_id = upload_hedra_audio(hedra_session, audio_path)
+
+    print(f"  seg{idx:02d}: submitting Hedra Character-3 generation...")
+    text_prompt = (
+        f"{member.persona}. Speaking calmly and clearly to camera, "
+        f"natural lip sync, {member.display_name}'s usual cadence."
+    )
+    gen_id = submit_hedra_clip(
+        hedra_session,
+        image_asset_id=member.hedra_image_asset_id,
+        audio_asset_id=audio_asset_id,
+        text_prompt=text_prompt,
+    )
+    t0 = time.time()
+    clip_asset_id, download_url = poll_hedra_clip(hedra_session, gen_id)
+    elapsed = time.time() - t0
+    print(f"  seg{idx:02d}: clip rendered in {elapsed:.1f}s, downloading...")
+    download_clip(download_url, clip_path)
+    update_segment_state(
+        manifest_path, idx,
+        clip_path=str(clip_path.relative_to(REPO_ROOT)),
+        clip_status="complete",
+        clip_asset_id=clip_asset_id,
+    )
+
+    print(f"  seg{idx:02d}: validating canary gates...")
+    validate_segment_outputs(audio_path, clip_path)
+    print(f"  seg{idx:02d}: ok")
+
+
 # ---- CLI ------------------------------------------------------------------
 
 def cmd_show_corpus(args: argparse.Namespace) -> int:
@@ -583,6 +948,65 @@ def cmd_generate_script(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_produce_segments(args: argparse.Namespace) -> int:
+    """Canary-then-scale TTS + Hedra clip generation across all manifest segments.
+
+    Segment 0 runs as the canary. If its objective gates pass, segments
+    1..N-1 run with the same gates. Any segment failure aborts the run
+    with the manifest left in whatever partial state it reached — the
+    next invocation can reuse already-complete segments.
+    """
+    eid = args.episode_id
+    manifest_path = episode_dir(eid) / "manifest.json"
+    if not manifest_path.exists():
+        print(f"manifest missing at {manifest_path} — run generate-script first.", file=sys.stderr)
+        return 2
+
+    manifest = _read_manifest(manifest_path)
+    segments = manifest["segments"]
+    n = len(segments)
+    print(f"Producing {n} segment(s) for episode {eid}")
+
+    cast = load_cast()
+    e_key = load_elevenlabs_key()
+    h_session = _hedra_session(load_hedra_key())
+
+    print("Canary: segment 0...")
+    process_segment(manifest_path=manifest_path, idx=0, cast=cast, elevenlabs_key=e_key, hedra_session=h_session)
+    print("Canary green. Scaling to remaining segments in parallel...")
+
+    parallel_workers = min(args.parallel, max(1, n - 1))
+    if parallel_workers <= 1 or n <= 2:
+        for idx in range(1, n):
+            process_segment(
+                manifest_path=manifest_path, idx=idx, cast=cast,
+                elevenlabs_key=e_key, hedra_session=h_session,
+            )
+    else:
+        with ThreadPoolExecutor(max_workers=parallel_workers) as ex:
+            futures = {
+                ex.submit(
+                    process_segment,
+                    manifest_path=manifest_path, idx=idx, cast=cast,
+                    elevenlabs_key=e_key, hedra_session=h_session,
+                ): idx
+                for idx in range(1, n)
+            }
+            for fut in as_completed(futures):
+                idx = futures[fut]
+                try:
+                    fut.result()
+                except Exception as e:
+                    print(f"  seg{idx:02d}: FAILED — {e}", file=sys.stderr)
+                    raise
+
+    manifest = _read_manifest(manifest_path)
+    manifest["validation_status"] = "segments_complete"
+    _write_manifest(manifest_path, manifest)
+    print(f"All {n} segments complete. validation_status=segments_complete")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Podcast orchestrator (Phase 0b).")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -602,11 +1026,25 @@ def main(argv: list[str] | None = None) -> int:
         help="Overwrite an existing manifest. Drops all per-segment pipeline state.",
     )
 
+    p_prod = sub.add_parser(
+        "produce-segments",
+        help="Canary-then-scale TTS + Hedra clip generation for all manifest segments.",
+    )
+    p_prod.add_argument("--episode-id", default="ep-001")
+    p_prod.add_argument(
+        "--parallel",
+        type=int,
+        default=4,
+        help="Parallel workers for non-canary segments (default 4).",
+    )
+
     args = parser.parse_args(argv)
     if args.cmd == "show-corpus":
         return cmd_show_corpus(args)
     if args.cmd == "generate-script":
         return cmd_generate_script(args)
+    if args.cmd == "produce-segments":
+        return cmd_produce_segments(args)
     parser.error(f"unknown command {args.cmd!r}")
     return 2
 
