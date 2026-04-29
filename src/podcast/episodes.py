@@ -83,8 +83,17 @@ def _write_episodes_json(
     episodes: list[EpisodeRecord],
     path: Path = EPISODES_PUBLIC_PATH,
 ) -> None:
-    """Sort ascending by id, dump JSON, atomic write."""
-    sorted_eps = sorted(episodes, key=lambda e: e.id)
+    """Sort newest-first (episodeNo desc, id desc tiebreak), dump JSON,
+    atomic write.
+
+    Order matters for the SPA: `Home.tsx`/`Podcast.tsx` both treat
+    `episodes[0]` as the latest episode. Sorting newest-first keeps that
+    contract honest as new episodes append. Mirrors the briefs convention
+    in `src/publish.py:merge_brief` (date desc, id desc tiebreak) — for
+    episodes the monotonic `episodeNo` is the natural primary key and id
+    is the stable tiebreaker.
+    """
+    sorted_eps = sorted(episodes, key=lambda e: (e.episodeNo, e.id), reverse=True)
     payload = [e.model_dump() for e in sorted_eps]
     atomic_write_text(path, json.dumps(payload, indent=2) + "\n")
 
