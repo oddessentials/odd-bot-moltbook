@@ -22,10 +22,22 @@ on:
         required: false
         default: ""
 
-# Repo-wide serialization scoped to the podcast pipeline so daily
-# brief x-posts can run concurrently without contention.
+# MUST share the daily x-post workflow's concurrency group. Both flows
+# read + rotate the same X_REFRESH_TOKEN secret. If they run in parallel
+# and X rotates the refresh token in BOTH responses, both call
+# `gh secret set X_REFRESH_TOKEN` — last writer wins, the loser's
+# rotated token becomes the canonical secret, and the winner's
+# already-rotated old token is invalidated by X. The next run on
+# either side fails with 401 and needs manual recovery.
+#
+# Shared mutex across both workflows is the cheapest fix: workflow
+# runs serialize globally (one daily + one podcast can't overlap),
+# rotation writeback is single-writer, and neither pipeline ever sees
+# a stale-but-clobbered secret. Trade-off: a long daily run delays a
+# podcast tweet (or vice versa), which is acceptable given both are
+# low-frequency (daily / weekly).
 concurrency:
-  group: podcast-x-post-main
+  group: x-post-main
   cancel-in-progress: false
 
 # Sidecar push needs `contents: write` (same rationale as x-post.yml).
