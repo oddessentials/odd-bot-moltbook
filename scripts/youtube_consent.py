@@ -24,6 +24,9 @@ from googleapiclient.discovery import build
 SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
     "https://www.googleapis.com/auth/youtube.readonly",
+    # captions.insert requires force-ssl to manage caption tracks on
+    # videos owned by the authenticated channel.
+    "https://www.googleapis.com/auth/youtube.force-ssl",
 ]
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
