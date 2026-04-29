@@ -225,6 +225,26 @@ VALIDATION_STATUS_ORDER: tuple[str, ...] = (
 )
 
 
+def is_at_or_past(current_status: str | None, target: str) -> bool:
+    """True if `current_status` is at the `target` phase or beyond.
+
+    Pivots on VALIDATION_STATUS_ORDER so callers don't hard-code phase
+    tuples that drift when new states (like "published") are appended.
+    A ratchet that rolls FORWARD only is paired with a state-test that
+    advances FORWARD only — both must agree on the canonical order.
+    """
+    if not current_status:
+        return False
+    if target not in VALIDATION_STATUS_ORDER:
+        raise ValueError(f"unknown target status: {target!r}")
+    if current_status not in VALIDATION_STATUS_ORDER:
+        # Unknown current (e.g., manifest written by a future engine) is
+        # treated as pre-initial so the caller doesn't accidentally skip
+        # its phase.
+        return False
+    return VALIDATION_STATUS_ORDER.index(current_status) >= VALIDATION_STATUS_ORDER.index(target)
+
+
 def advance_validation_status(manifest_path: Path, target: str) -> str:
     """Set `validation_status` to `target` only if `target` is at or past the
     current state in `VALIDATION_STATUS_ORDER`. Returns the resulting status

@@ -39,6 +39,7 @@ from .manifest import (
     derive_episode_no,
     derive_hosts,
     episode_dir,  # noqa: F401  -- used by cmd_generate_script via --force cleanup
+    is_at_or_past,
     manifest_path_for,
     read_manifest,
     resolve_inside_episode,
@@ -185,11 +186,10 @@ def cmd_stitch(args: argparse.Namespace) -> int:
         return 2
     manifest = read_manifest(mpath)
 
-    completed_states = ("stitched", "video_uploaded", "uploaded")
     stitched_path_str = manifest.get("stitched_path")
     if (
         not args.force
-        and manifest.get("validation_status") in completed_states
+        and is_at_or_past(manifest.get("validation_status"), "stitched")
         and stitched_path_str
     ):
         try:
@@ -302,8 +302,8 @@ def cmd_upload(args: argparse.Namespace) -> int:
                 manifest.pop("youtube_upload_session_uri", None)
                 manifest.pop("youtube_upload_total_bytes", None)
                 manifest["youtube_id"] = video_id
-                manifest["validation_status"] = "video_uploaded"
                 write_manifest(mpath, manifest)
+                advance_validation_status(mpath, "video_uploaded")
             except Exception as e:
                 print(
                     f"  resume failed ({e}); falling back to fresh upload.",
