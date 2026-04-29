@@ -119,6 +119,51 @@ def validate_segment_outputs(audio_path: Path, clip_path: Path) -> None:
         )
 
 
+def is_segment_complete_and_valid(
+    *,
+    manifest_path: Path,
+    seg: dict,
+    idx: int,
+) -> bool:
+    """Decide whether `seg`'s already-recorded artifacts let us skip work.
+
+    Treats the manifest as source of truth for the artifact paths — the
+    on-disk files at convention paths are NOT consulted unless the
+    manifest happens to point there. If the manifest-recorded artifacts
+    are present and pass `validate_segment_outputs`, returns True and
+    the caller should short-circuit. If they're recorded but fail
+    validation, the segment's audio/clip status flags are reset to
+    "pending" so the caller falls through to re-render. Otherwise
+    returns False (caller proceeds normally).
+    """
+    if seg.get("audio_status") != "complete" or seg.get("clip_status") != "complete":
+        return False
+    audio_rel = seg.get("audio_path")
+    clip_rel = seg.get("clip_path")
+    if not audio_rel or not clip_rel:
+        return False
+    audio_path = REPO_ROOT / audio_rel
+    clip_path = REPO_ROOT / clip_rel
+    if not audio_path.exists() or not clip_path.exists():
+        return False
+    try:
+        validate_segment_outputs(audio_path, clip_path)
+    except SegmentValidationError as e:
+        print(
+            f"  seg{idx:02d}: previously-complete segment failed re-validation "
+            f"({e}); resetting status and re-rendering."
+        )
+        update_segment_state(
+            manifest_path,
+            idx,
+            audio_status="pending",
+            clip_status="pending",
+        )
+        return False
+    print(f"  seg{idx:02d}: already complete, skipping")
+    return True
+
+
 def process_segment(
     *,
     manifest_path: Path,
@@ -129,9 +174,9 @@ def process_segment(
 ) -> None:
     """Run TTS + Hedra clip for one segment and update the manifest.
 
-    Idempotent-ish: if both audio and clip files exist on disk and the
-    manifest already records them as complete, skip and return. (Simple
-    resume — full state-machine rigor lands in Phase 1.)
+    Idempotent-ish: if the manifest records both artifacts as complete,
+    points at on-disk files, and those files pass `validate_segment_
+    outputs`, skip and return. Otherwise re-render at convention paths.
     """
     manifest = read_manifest(manifest_path)
     seg = manifest["segments"][idx]
@@ -145,33 +190,8 @@ def process_segment(
     audio_path = audio_dir(eid) / f"seg{idx:02d}.mp3"
     clip_path = clips_dir(eid) / f"seg{idx:02d}.mp4"
 
-    if (
-        seg.get("audio_status") == "complete"
-        and seg.get("clip_status") == "complete"
-        and audio_path.exists()
-        and clip_path.exists()
-    ):
-        # Phase 0b precedent set audio_status / clip_status to "complete"
-        # BEFORE running the objective gates, so a previously-failed
-        # validation could leave both flags lying. Re-validate before
-        # honoring the skip — if the gate raises, we fall through and
-        # re-render rather than registering a fake success.
-        try:
-            validate_segment_outputs(audio_path, clip_path)
-        except SegmentValidationError as e:
-            print(
-                f"  seg{idx:02d}: previously-complete segment failed re-validation "
-                f"({e}); resetting status and re-rendering."
-            )
-            update_segment_state(
-                manifest_path,
-                idx,
-                audio_status="pending",
-                clip_status="pending",
-            )
-        else:
-            print(f"  seg{idx:02d}: already complete, skipping")
-            return
+    if is_segment_complete_and_valid(manifest_path=manifest_path, seg=seg, idx=idx):
+        return
 
     seg["attempts"] = int(seg.get("attempts", 0)) + 1
     update_segment_state(manifest_path, idx, attempts=seg["attempts"])
