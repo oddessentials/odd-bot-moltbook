@@ -33,6 +33,7 @@ from .keys import (
 )
 from .manifest import (
     acquire_run_lock,
+    advance_validation_status,
     derive_episode_no,
     derive_hosts,
     episode_dir,  # noqa: F401  -- used by cmd_generate_script via --force cleanup
@@ -168,10 +169,8 @@ def cmd_produce_segments(args: argparse.Namespace) -> int:
                     print(f"  seg{idx:02d}: FAILED — {e}", file=sys.stderr)
                     raise
 
-    manifest = read_manifest(mpath)
-    manifest["validation_status"] = "segments_complete"
-    write_manifest(mpath, manifest)
-    print(f"All {n} segments complete. validation_status=segments_complete")
+    landed = advance_validation_status(mpath, "segments_complete")
+    print(f"All {n} segments complete. validation_status={landed}")
     return 0
 
 
@@ -211,9 +210,9 @@ def cmd_stitch(args: argparse.Namespace) -> int:
 
     manifest = read_manifest(mpath)
     manifest["stitched_path"] = str(final_path.relative_to(REPO_ROOT))
-    manifest["validation_status"] = "stitched"
     write_manifest(mpath, manifest)
-    print("validation_status=stitched")
+    landed = advance_validation_status(mpath, "stitched")
+    print(f"validation_status={landed}")
     return 0
 
 
@@ -302,8 +301,8 @@ def cmd_upload(args: argparse.Namespace) -> int:
             print(f"  videoId: {video_id}")
             manifest = read_manifest(mpath)
             manifest["youtube_id"] = video_id
-            manifest["validation_status"] = "video_uploaded"
             write_manifest(mpath, manifest)
+            advance_validation_status(mpath, "video_uploaded")
 
         print("Verifying via videos.list...")
         record = verify_youtube_video(credentials=creds, video_id=video_id)
@@ -340,9 +339,9 @@ def cmd_upload(args: argparse.Namespace) -> int:
         hosts=derive_hosts(EpisodeScript.model_validate(manifest["script"]), cast),
     )
     manifest["episode_record"] = record.model_dump()
-    manifest["validation_status"] = "uploaded"
     write_manifest(mpath, manifest)
-    print("validation_status=uploaded")
+    landed = advance_validation_status(mpath, "uploaded")
+    print(f"validation_status={landed}")
     print(f"Episode record (matches SPA Episode shape): {record.model_dump()}")
     print(f"YouTube URL: https://www.youtube.com/watch?v={video_id}")
     return 0
@@ -378,25 +377,23 @@ def cmd_run(args: argparse.Namespace) -> int:
         if rc != 0:
             return rc
 
-    # Phase 2: produce-segments. process_segment's per-segment idempotency
-    # plus the retry budget covers partial completion within this phase.
-    manifest = read_manifest(mpath)
-    completed = ("segments_complete", "stitched", "video_uploaded", "uploaded")
-    if manifest.get("validation_status") in completed:
-        print(
-            f"[run] segments already produced "
-            f"(validation_status={manifest['validation_status']!r}); skipping."
+    # Phase 2: produce-segments. Always invoked — even if validation_status
+    # is already segments_complete or beyond, we still need each segment's
+    # process_segment idempotency-skip path to re-run validate_segment_outputs
+    # against the artifacts on disk. Skipping based on validation_status
+    # alone would let an out-of-band corruption (file deleted, partial
+    # overwrite, manifest tampering) bypass the gate. The re-validation is
+    # cheap (~100ms per already-complete segment) and process_segment
+    # short-circuits without touching ElevenLabs/Hedra when the gates pass.
+    rc = cmd_produce_segments(
+        argparse.Namespace(
+            episode_id=eid,
+            parallel=args.parallel,
+            max_attempts=args.max_attempts,
         )
-    else:
-        rc = cmd_produce_segments(
-            argparse.Namespace(
-                episode_id=eid,
-                parallel=args.parallel,
-                max_attempts=args.max_attempts,
-            )
-        )
-        if rc != 0:
-            return rc
+    )
+    if rc != 0:
+        return rc
 
     # Phase 3: stitch. cmd_stitch is idempotent for non-forced runs.
     rc = cmd_stitch(argparse.Namespace(episode_id=eid, force=False))

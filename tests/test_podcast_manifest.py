@@ -15,9 +15,12 @@ import unittest
 from pathlib import Path
 
 from src.podcast.manifest import (
+    VALIDATION_STATUS_ORDER,
+    advance_validation_status,
     atomic_write_text,
     derive_episode_no,
     derive_hosts,
+    write_manifest,
 )
 from src.podcast.schema import CastConfig, CastMember, EpisodeScript, Segment
 
@@ -102,6 +105,73 @@ class TestDeriveHosts(unittest.TestCase):
         cast = _build_cast(["shrimp", "carl"], anchor="shrimp")
         script = _build_script(["shrimp", "carl", "shrimp", "carl"])
         self.assertEqual(derive_hosts(script, cast), ["Shrimp", "Carl"])
+
+
+class TestAdvanceValidationStatus(unittest.TestCase):
+    def _seed(self, td: Path, status: str | None) -> Path:
+        path = td / "manifest.json"
+        write_manifest(path, {"id": "ep-test", "validation_status": status})
+        return path
+
+    def test_advance_from_none(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._seed(Path(td), None)
+            landed = advance_validation_status(path, "script_generated")
+            self.assertEqual(landed, "script_generated")
+            with open(path) as f:
+                self.assertEqual(json.load(f)["validation_status"], "script_generated")
+
+    def test_advance_forward(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._seed(Path(td), "script_generated")
+            landed = advance_validation_status(path, "segments_complete")
+            self.assertEqual(landed, "segments_complete")
+
+    def test_does_not_roll_back(self):
+        # The load-bearing case: re-running an earlier phase (e.g.,
+        # produce-segments after upload completed) must NOT clobber the
+        # later phase marker.
+        with tempfile.TemporaryDirectory() as td:
+            path = self._seed(Path(td), "uploaded")
+            landed = advance_validation_status(path, "segments_complete")
+            self.assertEqual(landed, "uploaded")
+            with open(path) as f:
+                self.assertEqual(json.load(f)["validation_status"], "uploaded")
+
+    def test_same_state_is_a_noop(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._seed(Path(td), "stitched")
+            landed = advance_validation_status(path, "stitched")
+            self.assertEqual(landed, "stitched")
+
+    def test_unknown_target_raises(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._seed(Path(td), "script_generated")
+            with self.assertRaises(ValueError):
+                advance_validation_status(path, "bogus")
+
+    def test_unknown_current_treated_as_pre_initial(self):
+        # An unrecognized current (e.g., a manifest written by a future
+        # version of the engine) must not crash the ratchet — treat as
+        # pre-initial so any known target moves forward.
+        with tempfile.TemporaryDirectory() as td:
+            path = self._seed(Path(td), "weird_future_state")
+            landed = advance_validation_status(path, "uploaded")
+            self.assertEqual(landed, "uploaded")
+
+    def test_validation_status_order_is_canonical(self):
+        # Lock the canonical order so reorderings show up as test churn,
+        # not silent semantic drift.
+        self.assertEqual(
+            VALIDATION_STATUS_ORDER,
+            (
+                "script_generated",
+                "segments_complete",
+                "stitched",
+                "video_uploaded",
+                "uploaded",
+            ),
+        )
 
 
 class TestAtomicWriteText(unittest.TestCase):

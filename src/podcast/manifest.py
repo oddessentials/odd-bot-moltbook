@@ -138,6 +138,42 @@ def update_segment_state(manifest_path: Path, idx: int, **fields: Any) -> dict[s
         return seg
 
 
+# Ordered phase markers. Only advances are written by `advance_validation_status`
+# so that re-running an earlier phase (e.g., produce-segments after the episode
+# already uploaded) doesn't roll back a later phase's completion marker.
+VALIDATION_STATUS_ORDER: tuple[str, ...] = (
+    "script_generated",
+    "segments_complete",
+    "stitched",
+    "video_uploaded",
+    "uploaded",
+)
+
+
+def advance_validation_status(manifest_path: Path, target: str) -> str:
+    """Set `validation_status` to `target` only if `target` is at or past the
+    current state in `VALIDATION_STATUS_ORDER`. Returns the resulting status
+    so callers can log what actually landed.
+
+    Raises ValueError if `target` is not a known phase marker.
+    """
+    if target not in VALIDATION_STATUS_ORDER:
+        raise ValueError(f"unknown validation_status: {target!r}")
+    target_idx = VALIDATION_STATUS_ORDER.index(target)
+    with _MANIFEST_LOCK:
+        manifest = read_manifest(manifest_path)
+        current = manifest.get("validation_status")
+        try:
+            current_idx = VALIDATION_STATUS_ORDER.index(current) if current else -1
+        except ValueError:
+            current_idx = -1
+        if target_idx > current_idx:
+            manifest["validation_status"] = target
+            write_manifest(manifest_path, manifest)
+            return target
+        return current  # type: ignore[return-value]
+
+
 def write_initial_manifest(
     *,
     episode_id: str,
