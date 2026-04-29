@@ -179,9 +179,13 @@ entries = json.loads(ep_path.read_text())
 if not entries:
     print("PROCEED:empty_episodes"); sys.exit(0)
 latest = max(entries, key=lambda e: e.get("episodeNo", 0))
-latest_date_str = latest.get("date") or ""
-if not latest_date_str:
-    print("PROCEED:latest_has_no_date"); sys.exit(0)
+# Missing / empty / malformed date is a corruption signal, not a
+# "permissively proceed" case — letting the guard PROCEED on a bad
+# entry would re-introduce the over-fire hazard the guard exists to
+# prevent. date.fromisoformat raises on None / "" / unparseable
+# strings; bash sees no PROCEED|REFUSE prefix on stdout and exits 1
+# via the wildcard case below.
+latest_date_str = latest.get("date")
 days_since = (date.today() - date.fromisoformat(latest_date_str)).days
 verb = "PROCEED" if days_since >= min_days else "REFUSE"
 latest_id = latest.get("id") or "unknown"
