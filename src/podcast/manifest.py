@@ -47,35 +47,29 @@ class EpisodeBoundaryError(ValueError):
     """
 
 
-def resolve_inside_episode(
+def resolve_inside_dir(
     *,
-    manifest_path: Path,
+    boundary: Path,
     recorded_rel: str | None,
     repo_root: Path | None = None,
 ) -> Path:
-    """Resolve a manifest-recorded path against `repo_root` and confirm
-    it lies inside the manifest's episode directory.
+    """Resolve a recorded relative path against `repo_root` and confirm
+    it lies inside `boundary`.
 
-    The episode directory is `manifest_path.parent` — the operator-
-    supplied filesystem location, not anything pulled from manifest
-    contents. Recorded paths must be relative and must not escape via
-    `..` segments, absolute paths, or symlinks pointing out of the
-    episode subtree.
-
-    `repo_root` defaults to the module-level REPO_ROOT, looked up at
-    call time so tests can patch `manifest.REPO_ROOT` without
-    re-importing.
+    Generic version used by both the episode-dir sandbox and the
+    docs/podcast/<id>/ OG-output sandbox. `repo_root` defaults to the
+    module-level REPO_ROOT, looked up at call time so tests can patch
+    `manifest.REPO_ROOT` without re-importing.
 
     Returns the canonical resolved Path on success. Raises
     EpisodeBoundaryError on:
       - empty / None recorded_rel
-      - resolution outside manifest_path.parent (after `..` collapsing
-        and symlink following)
+      - newline / carriage return in recorded_rel or resolved path
+      - resolution outside `boundary` (after `..` collapsing and
+        symlink following)
     """
     if not recorded_rel:
-        raise EpisodeBoundaryError(
-            f"empty recorded path under {manifest_path.parent}"
-        )
+        raise EpisodeBoundaryError(f"empty recorded path under {boundary}")
     if "\n" in recorded_rel or "\r" in recorded_rel:
         raise EpisodeBoundaryError(
             f"recorded path contains a newline: {recorded_rel!r}"
@@ -84,19 +78,36 @@ def resolve_inside_episode(
     candidate = (effective_root / recorded_rel).resolve(strict=False)
     candidate_str = str(candidate)
     if "\n" in candidate_str or "\r" in candidate_str:
-        # Path.resolve() doesn't strip newlines; defense in depth so the
-        # final string we hand off to subprocess argv / quoted file lists
-        # / SRT cues can never carry a directive separator.
         raise EpisodeBoundaryError(
             f"resolved path contains a newline: {candidate!r}"
         )
-    boundary = manifest_path.parent.resolve(strict=False)
-    if not candidate.is_relative_to(boundary):
+    boundary_resolved = boundary.resolve(strict=False)
+    if not candidate.is_relative_to(boundary_resolved):
         raise EpisodeBoundaryError(
             f"recorded path {recorded_rel!r} resolves to {candidate} "
-            f"which escapes episode boundary {boundary}"
+            f"which escapes boundary {boundary_resolved}"
         )
     return candidate
+
+
+def resolve_inside_episode(
+    *,
+    manifest_path: Path,
+    recorded_rel: str | None,
+    repo_root: Path | None = None,
+) -> Path:
+    """Resolve a manifest-recorded path inside the manifest's episode
+    directory (`manifest_path.parent`).
+
+    Thin wrapper over `resolve_inside_dir` that anchors on the operator-
+    supplied filesystem location. manifest["id"] is mutable and cannot
+    be the source of the sandbox limit.
+    """
+    return resolve_inside_dir(
+        boundary=manifest_path.parent,
+        recorded_rel=recorded_rel,
+        repo_root=repo_root,
+    )
 
 
 @contextlib.contextmanager
@@ -210,6 +221,7 @@ VALIDATION_STATUS_ORDER: tuple[str, ...] = (
     "stitched",
     "video_uploaded",
     "uploaded",
+    "published",
 )
 
 

@@ -25,6 +25,7 @@ from .config import (
     YOUTUBE_DISCLAIMER,
 )
 from .corpus import load_eligible_corpus, summarize_corpus
+from .episodes import cmd_publish
 from .hedra import hedra_session
 from .keys import (
     load_elevenlabs_key,
@@ -482,6 +483,17 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_up.add_argument("--episode-id", default="ep-001")
 
+    p_pub = sub.add_parser(
+        "publish",
+        help=(
+            "Append/update data/episodes.json after every hard gate "
+            "passes (verified videoId, valid Episode shape, valid final "
+            "MP4, uploaded captions, OG page generated). Refuses on any "
+            "partial-success state."
+        ),
+    )
+    p_pub.add_argument("--episode-id", default="ep-001")
+
     p_run = sub.add_parser(
         "run",
         help=(
@@ -511,6 +523,7 @@ def main(argv: list[str] | None = None) -> int:
         "produce-segments": cmd_produce_segments,
         "stitch": cmd_stitch,
         "upload": cmd_upload,
+        "publish": cmd_publish,
         "run": cmd_run,
     }
     handler = locked_dispatch.get(args.cmd)

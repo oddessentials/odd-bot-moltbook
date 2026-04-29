@@ -12,6 +12,7 @@ agent-brief/.manus-logs/
 data/*
 !data/briefs.json
 !data/x-posts.jsonl
+!data/episodes.json
 logs/
 
 # Python

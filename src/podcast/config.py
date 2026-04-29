@@ -18,6 +18,9 @@ EPISODES_PUBLIC_PATH = DATA_DIR / "episodes.json"
 LOCK_PATH = DATA_DIR / ".podcast.run.lock"
 CAST_CONFIG_PATH = REPO_ROOT / "config" / "podcast-cast.yaml"
 
+DOCS_DIR = REPO_ROOT / "docs"
+PODCAST_OG_DIR = DOCS_DIR / "podcast"
+
 DAILY_ID = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 SCRIPT_MODEL = "claude-sonnet-4-6"
