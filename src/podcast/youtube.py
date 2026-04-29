@@ -229,15 +229,32 @@ def verify_youtube_video(*, credentials, video_id: str) -> dict[str, Any]:
 
 
 def set_youtube_privacy(*, credentials, video_id: str, privacy_status: str) -> dict[str, Any]:
-    """Update privacyStatus on an existing video and return the new record.
+    """Update privacyStatus on an existing video, preserving all other
+    status fields, and return the new record.
 
-    Used for the unlisted→public flip in Phase 2.4. The body is minimal —
-    just the id + the status field — because videos.update requires every
-    `part` you list to be present in the body, and we only want to mutate
-    `status`. Callers verify via verify_youtube_video.
+    YouTube's videos.update treats the `part` you name as a full
+    replacement of that resource part. If we send only privacyStatus
+    inside `status`, every OTHER status field (embeddable,
+    selfDeclaredMadeForKids, publicStatsViewable, license) reverts to
+    the API default — embeddable=False is the load-bearing one because
+    the SPA renders episodes through an iframe embed.
+
+    Read-modify-write keeps the existing status intact and only
+    overrides the one field we mean to change.
     """
     from googleapiclient.discovery import build
     youtube = build("youtube", "v3", credentials=credentials, cache_discovery=False)
-    body = {"id": video_id, "status": {"privacyStatus": privacy_status}}
-    resp = youtube.videos().update(part="status", body=body).execute()
-    return resp
+
+    current = youtube.videos().list(part="status", id=video_id).execute()
+    items = current.get("items", [])
+    if not items:
+        raise RuntimeError(f"videos.list found no item for id={video_id}")
+    status = dict(items[0].get("status", {}))
+    status["privacyStatus"] = privacy_status
+    # Load-bearing: the SPA renders every episode through an iframe
+    # embed, and the public flip is also where we recover from a prior
+    # bad update that wrote embeddable=False.
+    status["embeddable"] = True
+    body = {"id": video_id, "status": status}
+
+    return youtube.videos().update(part="status", body=body).execute()

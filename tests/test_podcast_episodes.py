@@ -324,6 +324,82 @@ class TestEpisodesJsonReadWrite(unittest.TestCase):
             self.assertEqual([e["id"] for e in payload], ["ep-001b", "ep-001"])
 
 
+class TestSetYoutubePrivacy(unittest.TestCase):
+    """videos.update with `part='status'` REPLACES the entire status part
+    server-side. Sending `{privacyStatus: 'public'}` alone resets every
+    other field (embeddable, selfDeclaredMadeForKids, etc.) to API
+    defaults — embeddable=False is the load-bearing one because the SPA
+    renders episodes through iframe embeds. Pin the read-modify-write +
+    explicit-embeddable-True contract.
+    """
+
+    def _build_chain(self, current_status: dict, new_status: dict):
+        """Return a fake youtube client that records calls to videos().list
+        and videos().update."""
+        from unittest.mock import MagicMock
+        list_call = MagicMock()
+        list_call.execute.return_value = {"items": [{"id": "vid", "status": current_status}]}
+        update_call = MagicMock()
+        update_call.execute.return_value = {"id": "vid", "status": new_status}
+        videos = MagicMock()
+        videos.list.return_value = list_call
+        videos.update.return_value = update_call
+        client = MagicMock()
+        client.videos.return_value = videos
+        return client, videos
+
+    def test_preserves_existing_status_fields(self):
+        from src.podcast.youtube import set_youtube_privacy
+        client, videos = self._build_chain(
+            current_status={
+                "privacyStatus": "unlisted",
+                "embeddable": True,
+                "selfDeclaredMadeForKids": False,
+                "publicStatsViewable": True,
+                "license": "youtube",
+            },
+            new_status={"privacyStatus": "public", "embeddable": True},
+        )
+        with mock.patch("googleapiclient.discovery.build", return_value=client):
+            set_youtube_privacy(credentials=object(), video_id="vid", privacy_status="public")
+        update_body = videos.update.call_args.kwargs["body"]
+        self.assertEqual(update_body["id"], "vid")
+        self.assertEqual(update_body["status"]["privacyStatus"], "public")
+        # All other fields preserved.
+        self.assertEqual(update_body["status"]["selfDeclaredMadeForKids"], False)
+        self.assertEqual(update_body["status"]["publicStatsViewable"], True)
+        self.assertEqual(update_body["status"]["license"], "youtube")
+
+    def test_forces_embeddable_true_even_when_current_is_false(self):
+        # The recovery case: a prior bad update already set
+        # embeddable=False. Read-modify-write would naively preserve that.
+        # The explicit override restores embeddability so the SPA's iframe
+        # works.
+        from src.podcast.youtube import set_youtube_privacy
+        client, videos = self._build_chain(
+            current_status={"privacyStatus": "public", "embeddable": False},
+            new_status={"privacyStatus": "public", "embeddable": True},
+        )
+        with mock.patch("googleapiclient.discovery.build", return_value=client):
+            set_youtube_privacy(credentials=object(), video_id="vid", privacy_status="public")
+        body_status = videos.update.call_args.kwargs["body"]["status"]
+        self.assertTrue(body_status["embeddable"])
+
+    def test_raises_if_videos_list_finds_no_item(self):
+        from src.podcast.youtube import set_youtube_privacy
+        from unittest.mock import MagicMock
+        list_call = MagicMock()
+        list_call.execute.return_value = {"items": []}
+        videos = MagicMock()
+        videos.list.return_value = list_call
+        client = MagicMock()
+        client.videos.return_value = videos
+        with mock.patch("googleapiclient.discovery.build", return_value=client), \
+             self.assertRaises(RuntimeError) as cm:
+            set_youtube_privacy(credentials=object(), video_id="missing-vid", privacy_status="public")
+        self.assertIn("missing-vid", str(cm.exception))
+
+
 class TestCmdFlipPublic(unittest.TestCase):
     """Phase 2.4 manual flip gate. videos.update is mocked; what's pinned
     is the gate (refuses below 'published') and the verify step that
