@@ -298,14 +298,30 @@ class TestEpisodesJsonReadWrite(unittest.TestCase):
             with self.assertRaises(PublishGateError):
                 _read_episodes_json(path)
 
-    def test_write_sorts_ascending_by_id(self):
+    def test_write_sorts_newest_first_by_episode_no(self):
+        # Order is load-bearing for the SPA — Home.tsx + Podcast.tsx
+        # both treat episodes[0] as the latest. Engine writes episodeNo
+        # descending so episodes[0] = newest.
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "episodes.json"
-            r1 = EpisodeRecord(**_record_payload(id="ep-002", episodeNo=2))
-            r2 = EpisodeRecord(**_record_payload(id="ep-001", episodeNo=1))
+            r1 = EpisodeRecord(**_record_payload(id="ep-001", episodeNo=1))
+            r2 = EpisodeRecord(**_record_payload(id="ep-002", episodeNo=2))
+            r3 = EpisodeRecord(**_record_payload(id="ep-003", episodeNo=3))
+            _write_episodes_json([r1, r3, r2], path)
+            payload = json.loads(path.read_text())
+            self.assertEqual([e["id"] for e in payload], ["ep-003", "ep-002", "ep-001"])
+
+    def test_write_id_descending_tiebreaks_when_episode_no_collides(self):
+        # Defensive: if a future operator pre-publishes a re-issue with
+        # the same episodeNo (or some test fixture creates a tie), the
+        # secondary sort key (id, descending) deterministically orders.
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "episodes.json"
+            r1 = EpisodeRecord(**_record_payload(id="ep-001", episodeNo=1))
+            r2 = EpisodeRecord(**_record_payload(id="ep-001b", episodeNo=1))
             _write_episodes_json([r1, r2], path)
             payload = json.loads(path.read_text())
-            self.assertEqual([e["id"] for e in payload], ["ep-001", "ep-002"])
+            self.assertEqual([e["id"] for e in payload], ["ep-001b", "ep-001"])
 
 
 if __name__ == "__main__":
