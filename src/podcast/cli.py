@@ -183,6 +183,21 @@ def cmd_stitch(args: argparse.Namespace) -> int:
         return 2
     manifest = read_manifest(mpath)
 
+    completed_states = ("stitched", "video_uploaded", "uploaded")
+    stitched_path_str = manifest.get("stitched_path")
+    if (
+        not args.force
+        and manifest.get("validation_status") in completed_states
+        and stitched_path_str
+        and (REPO_ROOT / stitched_path_str).exists()
+    ):
+        print(
+            f"final.mp4 already stitched at {stitched_path_str} "
+            f"(validation_status={manifest.get('validation_status')!r}); skipping. "
+            "Pass --force to re-stitch."
+        )
+        return 0
+
     expected_total = 0.0
     for s in manifest["segments"]:
         meta = ffprobe_streams(REPO_ROOT / s["clip_path"])
@@ -333,6 +348,65 @@ def cmd_upload(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_run(args: argparse.Namespace) -> int:
+    """Walk the full pipeline and skip phases that are already done.
+
+    Single entry point for the steady-state invocation: idempotent across
+    all four phases (script → segments → stitch → upload). The operator
+    can run this from any partial state and the engine catches up to a
+    fully published episode (still unlisted in Phase 0; the public flip
+    is Phase 2's publish-event work).
+
+    Lock is held for the entire pipeline run via main()'s dispatcher
+    wrapper, so per-phase calls never re-acquire.
+    """
+    eid = args.episode_id
+    mpath = manifest_path_for(eid)
+
+    # Phase 1: generate-script (refuses to clobber unless --force).
+    if mpath.exists() and not args.force:
+        print(f"[run] manifest exists at {mpath}; skipping generate-script.")
+    else:
+        rc = cmd_generate_script(
+            argparse.Namespace(
+                episode_id=eid,
+                episode_no=args.episode_no,
+                run_date=args.run_date,
+                force=args.force,
+            )
+        )
+        if rc != 0:
+            return rc
+
+    # Phase 2: produce-segments. process_segment's per-segment idempotency
+    # plus the retry budget covers partial completion within this phase.
+    manifest = read_manifest(mpath)
+    completed = ("segments_complete", "stitched", "video_uploaded", "uploaded")
+    if manifest.get("validation_status") in completed:
+        print(
+            f"[run] segments already produced "
+            f"(validation_status={manifest['validation_status']!r}); skipping."
+        )
+    else:
+        rc = cmd_produce_segments(
+            argparse.Namespace(
+                episode_id=eid,
+                parallel=args.parallel,
+                max_attempts=args.max_attempts,
+            )
+        )
+        if rc != 0:
+            return rc
+
+    # Phase 3: stitch. cmd_stitch is idempotent for non-forced runs.
+    rc = cmd_stitch(argparse.Namespace(episode_id=eid, force=False))
+    if rc != 0:
+        return rc
+
+    # Phase 4: upload. Already idempotent on youtube_id + youtube_caption_id.
+    return cmd_upload(argparse.Namespace(episode_id=eid))
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Podcast orchestrator (Phase 0b).")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -383,6 +457,25 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_up.add_argument("--episode-id", default="ep-001")
 
+    p_run = sub.add_parser(
+        "run",
+        help=(
+            "Walk the full pipeline (generate-script → produce-segments → "
+            "stitch → upload), skipping phases that are already complete. "
+            "Idempotent — safe to invoke from any partial state."
+        ),
+    )
+    p_run.add_argument("--episode-id", default="ep-001")
+    p_run.add_argument("--episode-no", type=int, default=None)
+    p_run.add_argument("--run-date", default=None)
+    p_run.add_argument("--parallel", type=int, default=4)
+    p_run.add_argument("--max-attempts", type=int, default=None)
+    p_run.add_argument(
+        "--force",
+        action="store_true",
+        help="Wipe stale episode dir and restart from scratch.",
+    )
+
     args = parser.parse_args(argv)
     if args.cmd == "show-corpus":
         # Read-only diagnostic — does not contend with concurrent runs.
@@ -393,6 +486,7 @@ def main(argv: list[str] | None = None) -> int:
         "produce-segments": cmd_produce_segments,
         "stitch": cmd_stitch,
         "upload": cmd_upload,
+        "run": cmd_run,
     }
     handler = locked_dispatch.get(args.cmd)
     if handler is None:
