@@ -20,6 +20,7 @@ from .config import (
     DEFAULT_VISIBILITY,
     REPO_ROOT,
     SCRIPT_MODEL,
+    SEGMENT_MAX_ATTEMPTS,
     YOUTUBE_DEFAULT_TAGS,
     YOUTUBE_DISCLAIMER,
 )
@@ -43,7 +44,7 @@ from .manifest import (
 from .media import ffprobe_streams, generate_srt
 from .schema import EpisodeRecord, EpisodeScript
 from .scripting import generate_episode_script
-from .segments import process_segment
+from .segments import process_segment_with_retry
 from .stitch import stitch_episode, validate_stitched_output
 from .youtube import (
     resume_youtube_upload,
@@ -108,9 +109,11 @@ def cmd_produce_segments(args: argparse.Namespace) -> int:
     """Canary-then-scale TTS + Hedra clip generation across all manifest segments.
 
     Segment 0 runs as the canary. If its objective gates pass, segments
-    1..N-1 run with the same gates. Any segment failure aborts the run
-    with the manifest left in whatever partial state it reached — the
-    next invocation can reuse already-complete segments.
+    1..N-1 run with the same gates. Each segment runs under a bounded
+    retry budget (default SEGMENT_MAX_ATTEMPTS); any segment failure
+    after the budget is exhausted aborts the run with the manifest left
+    in whatever partial state it reached — the next invocation reuses
+    already-complete segments.
     """
     eid = args.episode_id
     mpath = manifest_path_for(eid)
@@ -118,36 +121,42 @@ def cmd_produce_segments(args: argparse.Namespace) -> int:
         print(f"manifest missing at {mpath} — run generate-script first.", file=sys.stderr)
         return 2
 
+    if args.max_attempts is None:
+        args.max_attempts = SEGMENT_MAX_ATTEMPTS
+
     manifest = read_manifest(mpath)
     segments = manifest["segments"]
     n = len(segments)
-    print(f"Producing {n} segment(s) for episode {eid}")
+    print(f"Producing {n} segment(s) for episode {eid} (max_attempts={args.max_attempts})")
 
     cast = load_cast()
     e_key = load_elevenlabs_key()
     h_session = hedra_session(load_hedra_key())
 
     print("Canary: segment 0...")
-    process_segment(
+    process_segment_with_retry(
         manifest_path=mpath, idx=0, cast=cast,
         elevenlabs_key=e_key, hedra_session=h_session,
+        max_attempts=args.max_attempts,
     )
     print("Canary green. Scaling to remaining segments in parallel...")
 
     parallel_workers = min(args.parallel, max(1, n - 1))
     if parallel_workers <= 1 or n <= 2:
         for idx in range(1, n):
-            process_segment(
+            process_segment_with_retry(
                 manifest_path=mpath, idx=idx, cast=cast,
                 elevenlabs_key=e_key, hedra_session=h_session,
+                max_attempts=args.max_attempts,
             )
     else:
         with ThreadPoolExecutor(max_workers=parallel_workers) as ex:
             futures = {
                 ex.submit(
-                    process_segment,
+                    process_segment_with_retry,
                     manifest_path=mpath, idx=idx, cast=cast,
                     elevenlabs_key=e_key, hedra_session=h_session,
+                    max_attempts=args.max_attempts,
                 ): idx
                 for idx in range(1, n)
             }
@@ -353,6 +362,12 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=4,
         help="Parallel workers for non-canary segments (default 4).",
+    )
+    p_prod.add_argument(
+        "--max-attempts",
+        type=int,
+        default=None,
+        help="Per-segment retry budget (default: SEGMENT_MAX_ATTEMPTS = 3).",
     )
 
     p_stitch = sub.add_parser(
