@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.oddbot.moltbook.podcast.weekly</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/macmini1/repos/odd-bot-moltbook/scripts/run-weekly-podcast.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/macmini1/repos/odd-bot-moltbook</string>
+
+    <!-- Sunday 09:00 local. Different fire time from the daily 05:00
+         so log lines are easy to disambiguate; lock paths are also
+         distinct (data/.podcast.run.lock vs data/.run.lock) so a
+         daily run and a podcast run can interleave safely. The
+         X-post downstream workflows (daily x-post + podcast x-post)
+         do share a concurrency group at the GitHub Actions layer,
+         which serializes them globally. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>0</integer>
+        <key>Hour</key>
+        <integer>9</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- Recover from missed Sunday 09:00 windows (machine off/asleep).
+         The orchestrator's per-episode idempotency (manifest +
+         data/episodes.json publish gates) prevents double-publishes;
+         the wrapper's branch + Phase 3 guards prevent fire-on-the-
+         wrong-branch. -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/macmini1/repos/odd-bot-moltbook/logs/podcast-weekly.launchd.out</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/macmini1/repos/odd-bot-moltbook/logs/podcast-weekly.launchd.err</string>
+</dict>
+</plist>
