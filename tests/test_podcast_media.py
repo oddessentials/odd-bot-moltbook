@@ -85,7 +85,9 @@ class TestGenerateSrtWritePath(unittest.TestCase):
             def fake_probe(_path):
                 return {"format": {"duration": "3.5"}, "streams": []}
 
-            with mock.patch.object(media_module, "REPO_ROOT", tdp), \
+            from src.podcast import manifest as manifest_module
+
+            with mock.patch.object(manifest_module, "REPO_ROOT", tdp), \
                  mock.patch.object(media_module, "ffprobe_streams", side_effect=fake_probe):
                 srt_path = generate_srt(manifest_path=mpath)
 

@@ -29,11 +29,62 @@ from .config import (
     HEDRA_MODEL,
     HEDRA_MODEL_ID,
     LOCK_PATH,
+    REPO_ROOT,
     RESOLUTION,
     SCRIPT_MODEL,
     TTS_MODEL,
 )
 from .schema import BriefSummary, CastConfig, EpisodeScript
+
+
+class EpisodeBoundaryError(ValueError):
+    """Raised by `resolve_inside_episode` when a manifest-recorded path
+    resolves outside the manifest's episode directory.
+
+    Typed so callers (cmd_upload, generate_srt, stitch_episode, etc.)
+    can distinguish a sandbox violation from other ValueErrors and
+    refuse the operation rather than crash with a generic error.
+    """
+
+
+def resolve_inside_episode(
+    *,
+    manifest_path: Path,
+    recorded_rel: str | None,
+    repo_root: Path | None = None,
+) -> Path:
+    """Resolve a manifest-recorded path against `repo_root` and confirm
+    it lies inside the manifest's episode directory.
+
+    The episode directory is `manifest_path.parent` — the operator-
+    supplied filesystem location, not anything pulled from manifest
+    contents. Recorded paths must be relative and must not escape via
+    `..` segments, absolute paths, or symlinks pointing out of the
+    episode subtree.
+
+    `repo_root` defaults to the module-level REPO_ROOT, looked up at
+    call time so tests can patch `manifest.REPO_ROOT` without
+    re-importing.
+
+    Returns the canonical resolved Path on success. Raises
+    EpisodeBoundaryError on:
+      - empty / None recorded_rel
+      - resolution outside manifest_path.parent (after `..` collapsing
+        and symlink following)
+    """
+    if not recorded_rel:
+        raise EpisodeBoundaryError(
+            f"empty recorded path under {manifest_path.parent}"
+        )
+    effective_root = repo_root if repo_root is not None else REPO_ROOT
+    candidate = (effective_root / recorded_rel).resolve(strict=False)
+    boundary = manifest_path.parent.resolve(strict=False)
+    if not candidate.is_relative_to(boundary):
+        raise EpisodeBoundaryError(
+            f"recorded path {recorded_rel!r} resolves to {candidate} "
+            f"which escapes episode boundary {boundary}"
+        )
+    return candidate
 
 
 @contextlib.contextmanager

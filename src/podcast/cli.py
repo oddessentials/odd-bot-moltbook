@@ -32,6 +32,7 @@ from .keys import (
     load_youtube_credentials,
 )
 from .manifest import (
+    EpisodeBoundaryError,
     acquire_run_lock,
     advance_validation_status,
     derive_episode_no,
@@ -39,6 +40,7 @@ from .manifest import (
     episode_dir,  # noqa: F401  -- used by cmd_generate_script via --force cleanup
     manifest_path_for,
     read_manifest,
+    resolve_inside_episode,
     write_initial_manifest,
     write_manifest,
 )
@@ -188,18 +190,38 @@ def cmd_stitch(args: argparse.Namespace) -> int:
         not args.force
         and manifest.get("validation_status") in completed_states
         and stitched_path_str
-        and (REPO_ROOT / stitched_path_str).exists()
     ):
-        print(
-            f"final.mp4 already stitched at {stitched_path_str} "
-            f"(validation_status={manifest.get('validation_status')!r}); skipping. "
-            "Pass --force to re-stitch."
-        )
-        return 0
+        try:
+            stitched_abs = resolve_inside_episode(
+                manifest_path=mpath, recorded_rel=stitched_path_str,
+            )
+        except EpisodeBoundaryError as e:
+            print(
+                f"refusing to honor stitched_path skip — {e}",
+                file=sys.stderr,
+            )
+            return 2
+        if stitched_abs.exists():
+            print(
+                f"final.mp4 already stitched at {stitched_path_str} "
+                f"(validation_status={manifest.get('validation_status')!r}); skipping. "
+                "Pass --force to re-stitch."
+            )
+            return 0
 
     expected_total = 0.0
     for s in manifest["segments"]:
-        meta = ffprobe_streams(REPO_ROOT / s["clip_path"])
+        try:
+            clip_path = resolve_inside_episode(
+                manifest_path=mpath, recorded_rel=s.get("clip_path"),
+            )
+        except EpisodeBoundaryError as e:
+            print(
+                f"refusing to ffprobe segment clip — {e}",
+                file=sys.stderr,
+            )
+            return 2
+        meta = ffprobe_streams(clip_path)
         expected_total += float(meta["format"]["duration"])
 
     print(f"Stitching {len(manifest['segments'])} clips (expected total ≈ {expected_total:.2f}s)...")
@@ -227,7 +249,13 @@ def cmd_upload(args: argparse.Namespace) -> int:
         print("stitched_path missing — run stitch first.", file=sys.stderr)
         return 2
 
-    final_path = REPO_ROOT / manifest["stitched_path"]
+    try:
+        final_path = resolve_inside_episode(
+            manifest_path=mpath, recorded_rel=manifest.get("stitched_path"),
+        )
+    except EpisodeBoundaryError as e:
+        print(f"refusing to upload — {e}", file=sys.stderr)
+        return 2
     if not final_path.exists():
         print(f"stitched file missing: {final_path}", file=sys.stderr)
         return 2
@@ -326,7 +354,7 @@ def cmd_upload(args: argparse.Namespace) -> int:
 
     manifest = read_manifest(mpath)
     cast = load_cast()
-    final_meta = ffprobe_streams(REPO_ROOT / manifest["stitched_path"])
+    final_meta = ffprobe_streams(final_path)
     duration_min = max(1, int(round(float(final_meta["format"]["duration"]) / 60.0)))
     record = EpisodeRecord(
         id=eid,

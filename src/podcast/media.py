@@ -12,8 +12,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from .config import REPO_ROOT
-from .manifest import read_manifest
+from .manifest import read_manifest, resolve_inside_episode
 
 
 def ffprobe_streams(path: Path) -> dict[str, Any]:
@@ -83,7 +82,11 @@ def generate_srt(*, manifest_path: Path) -> Path:
     cues = []
     cursor = 0.0
     for i, seg in enumerate(segments):
-        audio_meta = ffprobe_streams(REPO_ROOT / seg["audio_path"])
+        audio_path = resolve_inside_episode(
+            manifest_path=manifest_path,
+            recorded_rel=seg.get("audio_path"),
+        )
+        audio_meta = ffprobe_streams(audio_path)
         dur = float(audio_meta["format"]["duration"])
         start = cursor
         end = cursor + dur

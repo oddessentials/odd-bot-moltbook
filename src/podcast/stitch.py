@@ -13,10 +13,9 @@ from pathlib import Path
 from .config import (
     EPISODE_DURATION_MAX_SEC,
     EPISODE_DURATION_MIN_SEC,
-    REPO_ROOT,
     STITCH_DURATION_TOLERANCE_SEC,
 )
-from .manifest import read_manifest
+from .manifest import read_manifest, resolve_inside_episode
 from .media import ffprobe_streams
 
 
@@ -36,9 +35,14 @@ def stitch_episode(*, manifest_path: Path, overwrite: bool = False) -> Path:
         raise FileExistsError(f"{final_path} exists. Pass overwrite=True to replace.")
 
     list_path = work_dir / "concat.txt"
-    concat_text = "\n".join(
-        f"file '{(REPO_ROOT / s['clip_path']).resolve()}'" for s in segments
-    ) + "\n"
+    # Each clip path is sandboxed to the episode directory before being
+    # written into the concat list — otherwise a tampered manifest could
+    # have ffmpeg ingest unrelated local media.
+    safe_clip_paths = [
+        resolve_inside_episode(manifest_path=manifest_path, recorded_rel=s.get("clip_path"))
+        for s in segments
+    ]
+    concat_text = "\n".join(f"file '{p}'" for p in safe_clip_paths) + "\n"
     list_path.write_text(concat_text)
 
     cmd = [

@@ -88,13 +88,17 @@ class TestIsSegmentCompleteAndValid(unittest.TestCase):
         return seg
 
     def _patch_repo(self, tdp: Path):
-        """Stack of patches that re-roots REPO_ROOT + EPISODES_DIR under
-        the test's tempdir. Returns a context manager."""
+        """Stack of patches that re-roots REPO_ROOT (used by
+        resolve_inside_episode in manifest.py via late-bound lookup) and
+        EPISODES_DIR under the test's tempdir. Returns a context manager."""
         from src.podcast import manifest as manifest_module
         return mock.patch.multiple(
-            segments_module, REPO_ROOT=tdp,
+            manifest_module,
+            REPO_ROOT=tdp,
+            EPISODES_DIR=tdp / "data" / "episodes",
         ), mock.patch.multiple(
-            manifest_module, EPISODES_DIR=tdp / "data" / "episodes",
+            segments_module,
+            REPO_ROOT=tdp,
         )
 
     def _layout_recorded(self, tdp: Path, audio_rel: str, clip_rel: str) -> tuple[Path, Path]:

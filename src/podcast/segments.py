@@ -32,7 +32,9 @@ from .hedra import (
     upload_hedra_audio,
 )
 from .manifest import (
+    EpisodeBoundaryError,
     read_manifest,
+    resolve_inside_episode,
     update_segment_state,
 )
 from .media import ffmpeg_mean_volume_db, ffprobe_streams
@@ -117,22 +119,6 @@ def validate_segment_outputs(audio_path: Path, clip_path: Path) -> None:
         )
 
 
-def _resolved_under(child: Path, parent: Path) -> bool:
-    """True if `child` resolves to a path inside `parent`.
-
-    Resolution follows symlinks and collapses `..`, so a manifest
-    recording `"../../../etc/passwd"` or an absolute path outside the
-    episode boundary will fail this check. Used as the sandbox guard for
-    manifest-recorded artifact paths.
-    """
-    try:
-        child_resolved = child.resolve(strict=False)
-        parent_resolved = parent.resolve(strict=False)
-    except (OSError, RuntimeError):
-        return False
-    return child_resolved.is_relative_to(parent_resolved)
-
-
 def is_segment_complete_and_valid(
     *,
     manifest_path: Path,
@@ -143,20 +129,18 @@ def is_segment_complete_and_valid(
 
     Treats the manifest as source of truth for the artifact PATHS but
     NOT for the boundary they must resolve inside. The boundary is
-    derived from `manifest_path.parent` — the operator-supplied
-    filesystem location — so a tampered `manifest["id"]` cannot widen
-    or relocate the sandbox. Recorded artifacts must resolve inside
-    that path; `..` segments, absolute paths, and escaping symlinks
-    are all refused.
+    derived from `manifest_path.parent` (operator-supplied filesystem
+    location) via the shared `resolve_inside_episode` helper — so a
+    tampered `manifest["id"]` cannot widen or relocate the sandbox.
+    Recorded artifacts must resolve inside that path; `..` segments,
+    absolute paths, and escaping symlinks are all refused.
 
     If the manifest-recorded artifacts are present, sandboxed, and pass
     `validate_segment_outputs`, returns True and the caller should
     short-circuit. If they fail any of those checks, the segment's
     audio/clip status flags are reset to "pending" and False is
     returned so the caller falls through to re-render at convention
-    paths. The single exception: when the recorded paths are simply
-    missing on disk (no escape, no validation failure), statuses are
-    left alone — the caller's re-render will overwrite them.
+    paths.
     """
     if seg.get("audio_status") != "complete" or seg.get("clip_status") != "complete":
         return False
@@ -164,17 +148,14 @@ def is_segment_complete_and_valid(
     clip_rel = seg.get("clip_path")
     if not audio_rel or not clip_rel:
         return False
-    audio_path = REPO_ROOT / audio_rel
-    clip_path = REPO_ROOT / clip_rel
 
-    # Boundary is filesystem-derived. manifest["id"] is mutable and
-    # cannot be the source of the sandbox limit.
-    boundary = manifest_path.parent
-    if not _resolved_under(audio_path, boundary) or not _resolved_under(clip_path, boundary):
+    try:
+        audio_path = resolve_inside_episode(manifest_path=manifest_path, recorded_rel=audio_rel)
+        clip_path = resolve_inside_episode(manifest_path=manifest_path, recorded_rel=clip_rel)
+    except EpisodeBoundaryError as e:
         print(
-            f"  seg{idx:02d}: manifest-recorded path escapes {boundary} "
-            f"(audio_path={audio_rel!r}, clip_path={clip_rel!r}); refusing to "
-            "validate, resetting status and re-rendering at convention paths."
+            f"  seg{idx:02d}: {e}; refusing to validate, resetting status "
+            "and re-rendering at convention paths."
         )
         update_segment_state(
             manifest_path,

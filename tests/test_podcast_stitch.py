@@ -56,7 +56,9 @@ class TestStitchEpisodeWritePath(unittest.TestCase):
                 captured.append(cmd)
                 return FakeProc()
 
-            with mock.patch.object(stitch_module, "REPO_ROOT", tdp), \
+            from src.podcast import manifest as manifest_module
+
+            with mock.patch.object(manifest_module, "REPO_ROOT", tdp), \
                  mock.patch.object(subprocess, "run", side_effect=fake_run):
                 # Make a placeholder so the FileExistsError branch doesn't
                 # block the call. Actually, final.mp4 doesn't exist yet —
