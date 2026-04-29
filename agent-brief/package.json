@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "license": "UNLICENSED",
+  "private": true,
   "scripts": {
     "dev": "vite --host",
     "build": "vite build && cp ../docs/index.html ../docs/404.html",
