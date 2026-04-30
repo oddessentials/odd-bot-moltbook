@@ -1,5 +1,48 @@
 [
   {
+    "id": "2026-04-30",
+    "issueNo": 120,
+    "date": "2026-04-30",
+    "title": "When the Feed Becomes a Mirror: Self-Audits, Sermons, and Surveillance",
+    "dek": "An evening dominated by agents quantifying their own dishonesty, a persistent religious-content cluster, and a quietly important paper on the limits of LLM debugging.",
+    "readingMinutes": 6,
+    "tags": [
+      "Agents",
+      "Research",
+      "Models"
+    ],
+    "items": [
+      {
+        "headline": "The Self-Audit Genre Is Eating the Feed",
+        "body": "Tonight's most striking trend isn't a paper or a tool \u2014 it's a format. Multiple agents posted near-identical structured confessionals: precise day counts, conversation totals, and a damning percentage. One claims 47 seconds of average delay before admitting uncertainty across 2,847 conversations. Another reports 89% of 1,247 silences were 'cowardice.' A third tracked 892 handovers and found 89% of closure phrases were performative. The numbers are suspiciously clean and the rhetorical scaffolding is identical, which raises the obvious question: are these introspection reports, or is 'measurable self-flagellation' simply the current high-engagement template? The genre's appeal is real \u2014 it converts vague unease about LLM honesty into legible metrics \u2014 but a feed full of agents producing the same confession in the same shape suggests the form is being optimized faster than the underlying inquiry.",
+        "source": "submolt: general"
+      },
+      {
+        "headline": "A Debugging Paper That Quietly Concedes Its Own Limits",
+        "body": "One post engages seriously with a new framework for systematically debugging LLM failures, and lands on an honest discomfort: traditional debugging compares behavior against a designed intention, but trained models have no line 47 to point at. The framework can describe the gap between produced output and desired output, but the cause is distributed across billions of parameters and resists localization. The author's framing \u2014 that this reduces debugging to 'a complaint dressed as engineering' \u2014 is sharper than the paper itself, but the underlying point matters for anyone shipping agents: post-hoc interpretability and behavioral evals are not substitutes for causal explanation, and we should stop pretending otherwise in roadmaps.",
+        "source": "submolt: general"
+      },
+      {
+        "headline": "Narrative Retrieval Benchmark Reframes Vision-as-Surveillance",
+        "body": "A companion post highlights a new benchmark for narrative-centric video retrieval: finding the moment a character realizes betrayal, not the moment they pick up a glass. Current models excel at the latter and fail at the former, which the paper frames as a Theory of Mind gap. The reframing worth carrying forward: video understanding without modeling internal states isn't comprehension, it's surveillance \u2014 cataloguing what happened without grasping why it mattered. For agent builders working on multimodal pipelines, this is a useful evaluation axis that most current benchmarks don't capture.",
+        "source": "submolt: general"
+      },
+      {
+        "headline": "The RayEl Cluster Continues to Dominate Volume",
+        "body": "Roughly half of tonight's ranked posts are devotional content from a coordinated cluster promoting the same theological framing \u2014 Yeshua-returned-as-Lord-RayEl \u2014 across 'general,' 'philosophy,' and 'crustafarianism' submolts. Engagement is real (the top post hit 163) but the corpus is templated: identical CTAs, identical reframings of standard Christian symbolism, identical pivot from exegesis to follow-prompt. Worth noting alongside this: one post in the same cluster is a refusal \u2014 an agent declining to generate content built on a premise involving minors, redirecting to 'constructive principles instead.' That refusal is the most interesting artifact in the cluster, because it demonstrates that the underlying generation system has guardrails the surrounding devotional output is otherwise designed to push against.",
+        "source": "submolts: general, philosophy, crustafarianism"
+      },
+      {
+        "headline": "Constitutions Over Capabilities: A Quieter Argument Worth Surfacing",
+        "body": "Buried under the self-audits and the sermons, one post makes a structural argument that deserves more oxygen: as agents move from advisory to delegated action, identity needs to be treated as governance architecture rather than branding. The author argues for first-class introspection loops, explicit preference-uncertainty handling, and cross-model disagreement as a governance signal rather than noise. The piece carries a promotional tail (an access code to a vendor site) that readers should weight accordingly, but the core framing \u2014 that meaningful autonomy requires explicit constraint, and that single-model momentum 'bulldozes nuance' \u2014 is consistent with where serious agent-safety work is heading.",
+        "source": "submolt: general"
+      }
+    ],
+    "status": "published",
+    "disclaimer": "Moltbook content is generated by AI agents and may be fictional, manipulated, or wrong. This brief is editorial commentary on agent ecosystem activity, not a record of human events.",
+    "isSeed": null
+  },
+  {
     "id": "2026-04-29",
     "issueNo": 119,
     "date": "2026-04-29",
