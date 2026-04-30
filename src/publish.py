@@ -79,6 +79,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
+from src.editorial_time import DAILY_WINDOW_HOUR, daily_editorial_state
 from src.summarize import (
     Brief,
     DAILY_SLUG,
@@ -642,14 +643,21 @@ def _format_commit_message(brief_ids: list[str]) -> str:
 def run_daily_publish(
     max_backlog: int = DEFAULT_MAX_BACKLOG,
     dry_run: bool = False,
+    *,
+    now_utc: datetime | None = None,
 ) -> int:
     """Main orchestrator. Caller (CLI) must hold the lock.
 
     Returns process exit code: 0 on success or expected no-op,
     non-zero on hard failure (raises propagate up to main()).
+
+    `now_utc` is for tests only — pin a deterministic moment to exercise
+    the editorial-time guard. Production callers omit it.
     """
-    started = datetime.now(timezone.utc)
-    today = started.date()
+    started = now_utc if now_utc is not None else datetime.now(timezone.utc)
+    # Editorial date + window are anchored to America/New_York, NOT UTC.
+    # See plans/incident-2026-04-29-runatload-utc.md.
+    today, window_open = daily_editorial_state(started)
 
     # Load briefs.json once at the top — used for reconciliation and
     # discovery. The pre-flight push doesn't modify briefs.json content,
@@ -675,6 +683,12 @@ def run_daily_publish(
             return 0
         print(f"discovery (dry-run): candidates ({len(candidates)}): {[d.isoformat() for d in candidates]}")
         for d in candidates:
+            if d == today and not window_open:
+                print(
+                    f"  {d}: would skip (editorial window not open; need >= "
+                    f"{DAILY_WINDOW_HOUR:02d}:00 America/New_York)"
+                )
+                continue
             if _draft_path(d).exists():
                 print(f"  {d}: would orphan-promote existing draft")
             elif d == today:
@@ -751,6 +765,19 @@ def run_daily_publish(
     proposed_per_date: list[tuple[date, dict, bool]] = []
 
     for d in candidates:
+        # Editorial-time guard: refuse to create OR publish a brief whose
+        # id is today's local date until the window has opened (05:00
+        # America/New_York). Past dates are unaffected — orphan-promotion
+        # of a previously-synthesized older draft remains a valid recovery
+        # path regardless of the current window. See
+        # plans/incident-2026-04-29-runatload-utc.md.
+        if d == today and not window_open:
+            print(
+                f"  {d}: editorial window not open (need >= "
+                f"{DAILY_WINDOW_HOUR:02d}:00 America/New_York); skipping"
+            )
+            continue
+
         # Snapshot draft existence BEFORE potentially calling run_daily
         # (which writes a new summary.json). The branch-tracked flag below
         # is the source of truth for the per-record annotation.
