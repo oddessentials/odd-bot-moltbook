@@ -168,8 +168,10 @@ fi
 # date → Python raises → bash exits 1 (operator investigates).
 CADENCE_RESULT=$(MIN_DAYS="$MIN_DAYS" "$REPO_ROOT/.venv/bin/python" -c '
 import json, os, sys
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
+
+from src.editorial_time import weekly_window_satisfied
 
 min_days = int(os.environ["MIN_DAYS"])
 ep_path = Path("data/episodes.json")
@@ -186,10 +188,27 @@ latest = max(entries, key=lambda e: e.get("episodeNo", 0))
 # strings; bash sees no PROCEED|REFUSE prefix on stdout and exits 1
 # via the wildcard case below.
 latest_date_str = latest.get("date")
-days_since = (date.today() - date.fromisoformat(latest_date_str)).days
-verb = "PROCEED" if days_since >= min_days else "REFUSE"
+latest_date = date.fromisoformat(latest_date_str)
+days_since = (date.today() - latest_date).days
 latest_id = latest.get("id") or "unknown"
-print(f"{verb}:{days_since}:{latest_id}:{latest_date_str}")
+
+# (1) Operator-tunable days-since gate. Cheap floor against rapid
+#     manual reinvocation.
+if days_since < min_days:
+    print(f"REFUSE:cadence:{days_since}:{latest_id}:{latest_date_str}")
+    sys.exit(0)
+
+# (2) Editorial-window gate. The weekly publish window opens at
+#     Sunday 09:00 America/New_York; refuse any fire whose most-recent
+#     window has already been filled by the latest publish. Anchored
+#     to local clock time, not UTC, so a Mac mini reboot crossing the
+#     UTC date boundary cannot pre-fire the next window. See
+#     plans/incident-2026-04-29-runatload-utc.md.
+if weekly_window_satisfied(datetime.now(timezone.utc), latest_date):
+    print(f"REFUSE:window:{days_since}:{latest_id}:{latest_date_str}")
+    sys.exit(0)
+
+print(f"PROCEED:{days_since}:{latest_id}:{latest_date_str}")
 ')
 
 if [ "${FORCE:-}" = "1" ]; then
@@ -200,9 +219,9 @@ else
             echo "  cadence guard: $CADENCE_RESULT"
             ;;
         REFUSE:*)
-            echo "  cadence guard: $CADENCE_RESULT (need >= $MIN_DAYS days since latest)."
-            echo "  no spend, no publish. Next reboot or scheduled fire will retry;"
-            echo "  the next eligible window opens $MIN_DAYS days after the latest publish."
+            echo "  cadence guard: $CADENCE_RESULT"
+            echo "  no spend, no publish. Next eligible fire is the next Sunday 09:00"
+            echo "  America/New_York at-or-after MIN_DAYS=$MIN_DAYS days from the latest publish."
             echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh finished (cadence guard)"
             exit 0
             ;;

@@ -79,6 +79,11 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
 
+from src.editorial_time import (
+    DAILY_WINDOW_HOUR,
+    daily_editorial_state,
+    is_daily_window_open_for,
+)
 from src.summarize import (
     Brief,
     DAILY_SLUG,
@@ -104,6 +109,14 @@ AGENT_BRIEF_DIR = REPO_ROOT / "agent-brief"
 # ---- Defaults ----
 
 DEFAULT_MAX_BACKLOG = 3
+
+
+def _now_utc() -> datetime:
+    """Wall-clock UTC. Indirected so tests can patch a single seam to
+    advance the clock between `started` capture and the per-date loop —
+    the path that closes the "captured-too-early" race.
+    """
+    return datetime.now(timezone.utc)
 
 # D10-A: hard floor at the cadence-flip date. Prevents the orchestrator
 # from ever scanning earlier dates for orphan drafts (e.g., the HF-replay
@@ -642,14 +655,32 @@ def _format_commit_message(brief_ids: list[str]) -> str:
 def run_daily_publish(
     max_backlog: int = DEFAULT_MAX_BACKLOG,
     dry_run: bool = False,
+    *,
+    now_utc: datetime | None = None,
 ) -> int:
     """Main orchestrator. Caller (CLI) must hold the lock.
 
     Returns process exit code: 0 on success or expected no-op,
     non-zero on hard failure (raises propagate up to main()).
+
+    `now_utc` is for tests only — pin a deterministic moment to exercise
+    the editorial-time guard. Production callers omit it.
     """
-    started = datetime.now(timezone.utc)
-    today = started.date()
+    # Pinning `now_utc` (test only) freezes the entire run's clock.
+    # In production (`now_utc is None`), each `_now()` call reads the
+    # wall-clock fresh — so a slow reconciliation/pre-flight push that
+    # crosses the 05:00 local boundary is observed at the per-date
+    # decision point, not lost to a stale snapshot.
+    def _now() -> datetime:
+        return now_utc if now_utc is not None else _now_utc()
+
+    started = _now()
+    # Editorial date is anchored to America/New_York, NOT UTC, and is
+    # captured ONCE here purely to scope `discover_work`'s candidate set.
+    # The publish-window eligibility itself is re-evaluated per-iteration
+    # below via `is_daily_window_open_for(d, _now())`. See
+    # plans/incident-2026-04-29-runatload-utc.md.
+    today, _ = daily_editorial_state(started)
 
     # Load briefs.json once at the top — used for reconciliation and
     # discovery. The pre-flight push doesn't modify briefs.json content,
@@ -675,6 +706,12 @@ def run_daily_publish(
             return 0
         print(f"discovery (dry-run): candidates ({len(candidates)}): {[d.isoformat() for d in candidates]}")
         for d in candidates:
+            if not is_daily_window_open_for(d, _now()):
+                print(
+                    f"  {d}: would skip (editorial window not open; need >= "
+                    f"{DAILY_WINDOW_HOUR:02d}:00 America/New_York)"
+                )
+                continue
             if _draft_path(d).exists():
                 print(f"  {d}: would orphan-promote existing draft")
             elif d == today:
@@ -751,6 +788,21 @@ def run_daily_publish(
     proposed_per_date: list[tuple[date, dict, bool]] = []
 
     for d in candidates:
+        # Editorial-time guard: refuse to create OR publish a brief whose
+        # id is today's local date until the window has opened (05:00
+        # America/New_York). Re-evaluated per-iteration via `_now()` so a
+        # slow reconciliation / pre-flight push that crosses the 05:00
+        # boundary picks up the now-eligible state instead of carrying a
+        # stale `started`-time snapshot. Past dates pass through —
+        # orphan-promotion of older drafts is always a valid recovery
+        # path. See plans/incident-2026-04-29-runatload-utc.md.
+        if not is_daily_window_open_for(d, _now()):
+            print(
+                f"  {d}: editorial window not open (need >= "
+                f"{DAILY_WINDOW_HOUR:02d}:00 America/New_York); skipping"
+            )
+            continue
+
         # Snapshot draft existence BEFORE potentially calling run_daily
         # (which writes a new summary.json). The branch-tracked flag below
         # is the source of truth for the per-record annotation.

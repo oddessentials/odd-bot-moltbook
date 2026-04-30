@@ -18,13 +18,16 @@ are integration concerns covered by the wrapper running end-to-end.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import tempfile
 import unittest
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from unittest import mock
 
+from src.editorial_time import EDITORIAL_TZ
 from src.publish import (
     _emit_per_brief_pages,
     _emit_per_episode_pages,
@@ -33,6 +36,7 @@ from src.publish import (
     _render_per_brief_html,
     discover_work,
     merge_brief,
+    run_daily_publish,
 )
 from src.summarize import STANDARD_DISCLAIMER
 
@@ -500,6 +504,181 @@ class TestEmitPerEpisodePages(unittest.TestCase):
             with self._patch_data_dir(data_dir):
                 emitted = _emit_per_episode_pages(_TEMPLATE_HTML, docs_root)
             self.assertEqual(emitted, [])
+
+
+class TestEditorialTimeGuard(unittest.TestCase):
+    """Locks down the 2026-04-29 incident: a UTC-derived `today` plus
+    `RunAtLoad=true` published the next local-date's brief 6.5 hours
+    early. The orchestrator now anchors `today` and the publish window
+    to America/New_York. See plans/incident-2026-04-29-runatload-utc.md.
+
+    Tests exercise the dry-run path because it executes the same
+    editorial-date selection and the same per-date guard logic as the
+    real flow, without touching git/build/network.
+    """
+
+    FLOOR_PUBLISHED = [
+        # Briefs.json fixture: caught-up through April 29.
+        {"id": "2026-04-27", "issueNo": 117, "date": "2026-04-27",
+         "title": "April 27", "dek": "d", "readingMinutes": 1,
+         "tags": ["Agents"], "items": [], "status": "published",
+         "disclaimer": STANDARD_DISCLAIMER, "isSeed": None},
+        {"id": "2026-04-28", "issueNo": 118, "date": "2026-04-28",
+         "title": "April 28", "dek": "d", "readingMinutes": 1,
+         "tags": ["Agents"], "items": [], "status": "published",
+         "disclaimer": STANDARD_DISCLAIMER, "isSeed": None},
+        {"id": "2026-04-29", "issueNo": 119, "date": "2026-04-29",
+         "title": "April 29", "dek": "d", "readingMinutes": 1,
+         "tags": ["Agents"], "items": [], "status": "published",
+         "disclaimer": STANDARD_DISCLAIMER, "isSeed": None},
+    ]
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.tmp_path = Path(self.tmp.name)
+        self.runs_path = self.tmp_path / "runs.jsonl"
+        self.digests_dir = self.tmp_path / "digests"
+        self.digests_dir.mkdir()
+        self._patches = [
+            mock.patch("src.publish.RUNS_PATH", self.runs_path),
+            mock.patch("src.summarize.RUNS_PATH", self.runs_path),
+            mock.patch(
+                "src.publish._draft_path",
+                lambda d: self.digests_dir / d.isoformat() / "summary.json",
+            ),
+            mock.patch("src.publish._commits_ahead", return_value=0),
+        ]
+        for p in self._patches:
+            p.start()
+        # _load_briefs gets its own per-test mock so individual tests can
+        # override the return value without breaking setUp's patches.
+        self._load_briefs_patch = mock.patch(
+            "src.publish._load_briefs",
+            return_value=list(self.FLOOR_PUBLISHED),
+        )
+        self._load_briefs_mock = self._load_briefs_patch.start()
+
+    def tearDown(self):
+        self._load_briefs_patch.stop()
+        for p in self._patches:
+            p.stop()
+        self.tmp.cleanup()
+
+    def _dry_run_at(self, when_utc: datetime, briefs=None) -> str:
+        if briefs is not None:
+            self._load_briefs_mock.return_value = list(briefs)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = run_daily_publish(dry_run=True, now_utc=when_utc)
+        self.assertEqual(rc, 0)
+        return buf.getvalue()
+
+    def test_2026_04_29_22_40_EDT_does_not_target_apr_30(self):
+        # The exact incident moment. Editorial today=April 29 (already
+        # published) — discover_work returns no candidates and April 30
+        # is never named in the output.
+        out = self._dry_run_at(self._local_to_utc(2026, 4, 29, 22, 40))
+        self.assertIn("today=2026-04-29", out)
+        self.assertIn("no candidates", out)
+        self.assertNotIn("2026-04-30", out)
+
+    def test_2026_04_30_04_59_EDT_skips_apr_30_window_closed(self):
+        # Editorial today=April 30 but the 05:00 local window has not
+        # opened. Candidate 2026-04-30 must be reported as a skip with
+        # the "editorial window not open" reason.
+        out = self._dry_run_at(self._local_to_utc(2026, 4, 30, 4, 59))
+        self.assertIn("today=2026-04-30", out)
+        self.assertIn("2026-04-30: would skip (editorial window not open", out)
+        self.assertNotIn("would fetch live", out)
+
+    def test_2026_04_30_05_00_EDT_targets_apr_30(self):
+        # Window open. Candidate 2026-04-30 is reported as a fetch+synth
+        # target. Idempotency for already-published 04-29 and 04-28
+        # excludes them upstream in discover_work.
+        out = self._dry_run_at(self._local_to_utc(2026, 4, 30, 5, 0))
+        self.assertIn("today=2026-04-30", out)
+        self.assertIn("2026-04-30: would fetch live + synthesize (today)", out)
+        self.assertNotIn("editorial window not open", out)
+
+    def test_2026_04_30_09_00_UTC_scheduled_fire_targets_apr_30(self):
+        # Scheduled launchd fire: Hour=5 local in EDT = 09:00 UTC.
+        # Canonical "every day works" path; must remain green.
+        out = self._dry_run_at(
+            datetime(2026, 4, 30, 9, 0, tzinfo=timezone.utc),
+        )
+        self.assertIn("today=2026-04-30", out)
+        self.assertIn("2026-04-30: would fetch live + synthesize (today)", out)
+
+    def test_already_published_idempotency_at_window_closed(self):
+        # April 30 already in briefs.json. At ANY time of day (here:
+        # 04:59 EDT, before the window) the orchestrator must exit
+        # cleanly with no candidates — idempotency takes precedence.
+        briefs = list(self.FLOOR_PUBLISHED) + [
+            {"id": "2026-04-30", "issueNo": 120, "date": "2026-04-30",
+             "title": "April 30", "dek": "d", "readingMinutes": 1,
+             "tags": ["Agents"], "items": [], "status": "published",
+             "disclaimer": STANDARD_DISCLAIMER, "isSeed": None},
+        ]
+        out = self._dry_run_at(
+            self._local_to_utc(2026, 4, 30, 4, 59), briefs=briefs,
+        )
+        self.assertIn("no candidates", out)
+        self.assertNotIn("would fetch live", out)
+        self.assertNotIn("editorial window not open", out)
+
+    def test_already_published_idempotency_at_window_open(self):
+        # Same fixture, window now open. Still no candidates — already
+        # published.
+        briefs = list(self.FLOOR_PUBLISHED) + [
+            {"id": "2026-04-30", "issueNo": 120, "date": "2026-04-30",
+             "title": "April 30", "dek": "d", "readingMinutes": 1,
+             "tags": ["Agents"], "items": [], "status": "published",
+             "disclaimer": STANDARD_DISCLAIMER, "isSeed": None},
+        ]
+        out = self._dry_run_at(
+            self._local_to_utc(2026, 4, 30, 5, 0), briefs=briefs,
+        )
+        self.assertIn("no candidates", out)
+        self.assertNotIn("would fetch live", out)
+
+    def test_captured_too_early_window_reopens_during_run(self):
+        """Codex stop-time finding: a reboot at 04:59:30 EDT followed by
+        a slow reconciliation/pre-flight that crosses 05:00 must NOT
+        carry the stale `window_open=False` snapshot into the per-date
+        loop. The orchestrator re-evaluates at decision time via
+        `_now()`, so today's brief becomes eligible mid-run.
+
+        Test exercises the production code path (`now_utc=None`) and
+        patches `_now_utc()` to return:
+          - first call (`started` capture): 04:59:30 EDT (window closed)
+          - subsequent calls (per-iteration check): 05:00:05 EDT (open)
+        """
+        started_utc = self._local_to_utc(2026, 4, 30, 4, 59, 30)
+        decision_utc = self._local_to_utc(2026, 4, 30, 5, 0, 5)
+
+        clock = iter([started_utc, decision_utc, decision_utc, decision_utc])
+        with mock.patch("src.publish._now_utc", side_effect=lambda: next(clock)):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = run_daily_publish(dry_run=True, now_utc=None)
+            out = buf.getvalue()
+
+        self.assertEqual(rc, 0)
+        # `started`-time `today` derivation reads 2026-04-30 (local date
+        # is the same on both sides of the boundary).
+        self.assertIn("today=2026-04-30", out)
+        # Per-iteration check uses the decision-time clock — window is
+        # open, so the candidate is reported as a fetch target, not a
+        # window-closed skip.
+        self.assertIn("2026-04-30: would fetch live + synthesize (today)", out)
+        self.assertNotIn("editorial window not open", out)
+
+    @staticmethod
+    def _local_to_utc(year, month, day, hour, minute=0, second=0) -> datetime:
+        return (
+            datetime(year, month, day, hour, minute, second, tzinfo=EDITORIAL_TZ)
+            .astimezone(timezone.utc)
+        )
 
 
 if __name__ == "__main__":
