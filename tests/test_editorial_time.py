@@ -23,15 +23,17 @@ from zoneinfo import ZoneInfo
 from src.editorial_time import (
     EDITORIAL_TZ,
     daily_editorial_state,
+    is_daily_window_open_for,
     most_recent_weekly_window_date,
     weekly_window_satisfied,
 )
 
 
-def _local(year: int, month: int, day: int, hour: int, minute: int = 0) -> datetime:
+def _local(year: int, month: int, day: int, hour: int, minute: int = 0,
+           second: int = 0) -> datetime:
     """Construct a UTC instant equivalent to the given America/New_York wall-clock."""
     return (
-        datetime(year, month, day, hour, minute, tzinfo=EDITORIAL_TZ)
+        datetime(year, month, day, hour, minute, second, tzinfo=EDITORIAL_TZ)
         .astimezone(timezone.utc)
     )
 
@@ -192,6 +194,67 @@ class TestWeeklyWindowSatisfied(unittest.TestCase):
                 _local(2026, 4, 28, 14, 0), date(2026, 4, 26),
             ),
         )
+
+
+class TestIsDailyWindowOpenFor(unittest.TestCase):
+    """`is_daily_window_open_for(d, now_utc)` is the per-iteration helper
+    that closes the captured-too-early race in the orchestrator's per-date
+    loop."""
+
+    def test_today_before_window_returns_false(self):
+        # 04:59 EDT April 30 — today, window not yet opened.
+        self.assertFalse(
+            is_daily_window_open_for(
+                date(2026, 4, 30), _local(2026, 4, 30, 4, 59),
+            ),
+        )
+
+    def test_today_at_window_returns_true(self):
+        self.assertTrue(
+            is_daily_window_open_for(
+                date(2026, 4, 30), _local(2026, 4, 30, 5, 0),
+            ),
+        )
+
+    def test_today_after_window_returns_true(self):
+        self.assertTrue(
+            is_daily_window_open_for(
+                date(2026, 4, 30), _local(2026, 4, 30, 22, 30),
+            ),
+        )
+
+    def test_past_date_always_open_for_catchup(self):
+        # Even at a moment when today's window is closed (04:59 EDT April 30),
+        # a past date (April 29) must be eligible — orphan-promotion catch-up.
+        self.assertTrue(
+            is_daily_window_open_for(
+                date(2026, 4, 29), _local(2026, 4, 30, 4, 59),
+            ),
+        )
+
+    def test_future_date_never_open(self):
+        # 22:40 EDT April 29 → "today" is April 29. April 30 is the future.
+        self.assertFalse(
+            is_daily_window_open_for(
+                date(2026, 4, 30), _local(2026, 4, 29, 22, 40),
+            ),
+        )
+
+    def test_captured_too_early_pattern_resolves_correctly_at_decision_time(self):
+        # The exact race the orchestrator's per-iteration check exists to
+        # close: started captured at 04:59:30, decision happens at 05:00:05
+        # after a slow reconciliation. The helper must read True at decision
+        # time even though the start-of-run snapshot would have read False.
+        started = _local(2026, 4, 30, 4, 59, 30)
+        decision = _local(2026, 4, 30, 5, 0, 5)
+        self.assertFalse(is_daily_window_open_for(date(2026, 4, 30), started))
+        self.assertTrue(is_daily_window_open_for(date(2026, 4, 30), decision))
+
+    def test_naive_datetime_raises(self):
+        with self.assertRaises(ValueError):
+            is_daily_window_open_for(
+                date(2026, 4, 30), datetime(2026, 4, 30, 5, 0),
+            )
 
 
 class TestEditorialTzIdentity(unittest.TestCase):

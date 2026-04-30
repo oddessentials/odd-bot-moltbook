@@ -564,13 +564,6 @@ class TestEditorialTimeGuard(unittest.TestCase):
             p.stop()
         self.tmp.cleanup()
 
-    @staticmethod
-    def _local_to_utc(year, month, day, hour, minute=0) -> datetime:
-        return (
-            datetime(year, month, day, hour, minute, tzinfo=EDITORIAL_TZ)
-            .astimezone(timezone.utc)
-        )
-
     def _dry_run_at(self, when_utc: datetime, briefs=None) -> str:
         if briefs is not None:
             self._load_briefs_mock.return_value = list(briefs)
@@ -647,6 +640,45 @@ class TestEditorialTimeGuard(unittest.TestCase):
         )
         self.assertIn("no candidates", out)
         self.assertNotIn("would fetch live", out)
+
+    def test_captured_too_early_window_reopens_during_run(self):
+        """Codex stop-time finding: a reboot at 04:59:30 EDT followed by
+        a slow reconciliation/pre-flight that crosses 05:00 must NOT
+        carry the stale `window_open=False` snapshot into the per-date
+        loop. The orchestrator re-evaluates at decision time via
+        `_now()`, so today's brief becomes eligible mid-run.
+
+        Test exercises the production code path (`now_utc=None`) and
+        patches `_now_utc()` to return:
+          - first call (`started` capture): 04:59:30 EDT (window closed)
+          - subsequent calls (per-iteration check): 05:00:05 EDT (open)
+        """
+        started_utc = self._local_to_utc(2026, 4, 30, 4, 59, 30)
+        decision_utc = self._local_to_utc(2026, 4, 30, 5, 0, 5)
+
+        clock = iter([started_utc, decision_utc, decision_utc, decision_utc])
+        with mock.patch("src.publish._now_utc", side_effect=lambda: next(clock)):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = run_daily_publish(dry_run=True, now_utc=None)
+            out = buf.getvalue()
+
+        self.assertEqual(rc, 0)
+        # `started`-time `today` derivation reads 2026-04-30 (local date
+        # is the same on both sides of the boundary).
+        self.assertIn("today=2026-04-30", out)
+        # Per-iteration check uses the decision-time clock — window is
+        # open, so the candidate is reported as a fetch target, not a
+        # window-closed skip.
+        self.assertIn("2026-04-30: would fetch live + synthesize (today)", out)
+        self.assertNotIn("editorial window not open", out)
+
+    @staticmethod
+    def _local_to_utc(year, month, day, hour, minute=0, second=0) -> datetime:
+        return (
+            datetime(year, month, day, hour, minute, second, tzinfo=EDITORIAL_TZ)
+            .astimezone(timezone.utc)
+        )
 
 
 if __name__ == "__main__":

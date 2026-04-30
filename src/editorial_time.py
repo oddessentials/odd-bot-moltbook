@@ -42,11 +42,45 @@ def daily_editorial_state(now_utc: datetime) -> tuple[date, bool]:
     boundary (05:00 local) for `today_local`. When False, the orchestrator
     must refuse to create or publish a new brief for `today_local`. Past
     dates and reconciliation flows are unaffected.
+
+    Note: this snapshots state at one instant. The orchestrator must call
+    `is_daily_window_open_for(d, now_utc)` at decision time to avoid the
+    "captured too early" race where a slow reconciliation crosses the
+    05:00 boundary between `started` and the per-date loop.
     """
     if now_utc.tzinfo is None:
         raise ValueError("now_utc must be timezone-aware")
     now_local = now_utc.astimezone(EDITORIAL_TZ)
     return now_local.date(), now_local.hour >= DAILY_WINDOW_HOUR
+
+
+def is_daily_window_open_for(d: date, now_utc: datetime) -> bool:
+    """Return True iff the daily publish window for local date `d` is open
+    at `now_utc`.
+
+    Decision-time helper for the orchestrator's per-date loop. Re-evaluating
+    here (rather than reusing a snapshot from `started`) closes the
+    "captured-too-early" race: a reboot at 04:59:30 EDT followed by a
+    35-second reconciliation/pre-flight push would otherwise see a stale
+    `window_open=False` and silently skip today's brief, even though the
+    window opened mid-run.
+
+    Semantics:
+      - `d` strictly before today (catch-up)  → True (windows already
+        opened on those past dates).
+      - `d` strictly after today (future)     → False (no window yet).
+      - `d == today_local`                    → gated on local hour >=
+        `DAILY_WINDOW_HOUR`.
+    """
+    if now_utc.tzinfo is None:
+        raise ValueError("now_utc must be timezone-aware")
+    now_local = now_utc.astimezone(EDITORIAL_TZ)
+    today_local = now_local.date()
+    if d < today_local:
+        return True
+    if d > today_local:
+        return False
+    return now_local.hour >= DAILY_WINDOW_HOUR
 
 
 def most_recent_weekly_window_date(now_utc: datetime) -> date:

@@ -54,9 +54,13 @@ local time**, not UTC:
 - **Daily window opens at 05:00 America/New_York every calendar day.**
   - `src/publish.py` derives `today` from the local date in
     `America/New_York` (via the new `src/editorial_time.py` helper).
-  - The `d == today` live-fetch path is gated on `window_open == True`
-    (i.e., local hour ≥ 5). Below that, the candidate is skipped with a
-    clear log line.
+  - The per-date loop calls `is_daily_window_open_for(d, _now())` at
+    each iteration — i.e., the window check is **re-evaluated at
+    decision time**, not snapshotted at `started`. This closes the
+    captured-too-early race where a reboot at 04:59:30 EDT followed by
+    a 35-second reconciliation/pre-flight push would otherwise see a
+    stale `False` and silently skip today's brief, even though the
+    window opened mid-run.
   - Reconciliation + pre-flight push run regardless of window state — those
     are operational catch-up paths and are safe.
 - **Weekly podcast window opens at 09:00 America/New_York every Sunday.**
@@ -88,6 +92,10 @@ the trigger safe regardless of when it fires.
 - Weekly: Sunday 09:00 EDT scheduled fire → wrapper PROCEEDS.
 - Weekly: Sunday 10:00 EDT (overslept the cron) → wrapper PROCEEDS
   (catch-up preserved).
+- Captured-too-early race (Codex stop-time finding): `started` captured
+  at 04:59:30 EDT, decision moment is 05:00:05 EDT — the per-date loop
+  must observe the window-open state at decision time and proceed,
+  not skip on the stale `started`-time snapshot.
 
 ## What was NOT changed (deliberate)
 
