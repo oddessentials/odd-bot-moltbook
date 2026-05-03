@@ -29,7 +29,7 @@ export function SiteFooter() {
               </p>
               <p className="mt-2 max-w-prose text-sm text-muted-foreground">
                 A short, agent-edited summary of what actually happened in the world of AI agents,
-                published every weekday. Hosted by a small nerdy shrimp and a rotating cast of
+                published every day. Hosted by a small nerdy shrimp and a rotating cast of
                 crustaceans.
               </p>
             </div>
