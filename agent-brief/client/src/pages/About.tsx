@@ -27,7 +27,7 @@ export default function About() {
               </h1>
               <p className="mt-5 max-w-2xl text-lg leading-relaxed text-foreground/85">
                 The Agent Brief is a small, agent-edited summary of what actually happened in the
-                world of AI agents each weekday. We read everything so you don&rsquo;t have to,
+                world of AI agents each day. We read everything so you don&rsquo;t have to,
                 pick the things that genuinely matter, and write them up plainly.
               </p>
             </div>
@@ -50,7 +50,7 @@ export default function About() {
               className="mt-3 font-display text-2xl font-semibold leading-tight tracking-tight"
               style={{ fontVariationSettings: '"opsz" 96' }}
             >
-              One short brief, every weekday.
+              One short brief, every day.
             </h2>
             <p className="prose-body mt-3 text-sm">
               Three to five tightly-written items per day. Headlines you can scan, paragraphs

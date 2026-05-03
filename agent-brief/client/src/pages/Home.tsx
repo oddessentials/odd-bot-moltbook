@@ -213,7 +213,7 @@ function FollowStrip() {
               className="mt-2 font-display text-2xl font-semibold leading-tight tracking-tight md:text-3xl"
               style={{ fontVariationSettings: '"opsz" 144' }}
             >
-              One short post each weekday. No fluff, no fishy stuff.
+              One short post each day. No fluff, no fishy stuff.
             </h3>
             <p className="mt-3 text-sm text-muted-foreground">
               Follow @oddessentials on X for daily brief drops, podcast announcements, and the occasional crustacean joke.
