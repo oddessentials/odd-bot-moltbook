@@ -145,12 +145,17 @@ case "$RECON_STATUS" in
         :
         ;;
     STATUS:ok:push*|STATUS:ok:rebase*)
-        # We pushed local commits to origin. The downstream
-        # podcast-x-post workflow fires on that push; exit so we don't
-        # generate a new episode on top of the just-pushed one.
-        echo "  pushed prior commit(s); exiting WITHOUT generating new content."
-        echo "  the next scheduled cadence picks up steady-state."
-        echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh finished (pre-flight reconcile push)"
+        # We pushed local bot-owned commits to origin. The downstream
+        # podcast-x-post workflow fires on that push; this run's job
+        # was reconciliation only. Generating a new episode on top of
+        # a just-pushed prior episode would burn credits before the
+        # downstream sidecar settles and before the operator has a
+        # chance to verify origin — so we exit here, NOT continue.
+        echo "  reconciled prior bot work and pushed to origin."
+        echo "  EXITING THIS RUN — no script-gen / TTS / Hedra / YouTube spend."
+        echo "  this run's job was reconciliation only; new content generation"
+        echo "  resumes on the next scheduled Sunday fire (or a manual rerun)."
+        echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh finished (pre-flight reconciled prior work; no generation)"
         exit 0
         ;;
     STATUS:halt:*)

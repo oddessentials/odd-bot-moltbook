@@ -695,11 +695,19 @@ def run_daily_publish(
     if dry_run:
         print(f"--- dry-run report (today={today.isoformat()}, max_backlog={max_backlog}) ---")
         _reconcile_finalization(briefs, dry_run=True)
+        # Dry-run uses the simpler ahead-only `_commits_ahead` since
+        # dry-run is read-only by contract (no fetch, no state
+        # mutation). The production path (non-dry-run) calls
+        # reconcile_with_origin which performs full ahead/behind/
+        # divergence reconciliation. The vocabularies intentionally
+        # diverge — dry-run is operator-visibility only and never
+        # mutates state, so a fetching reconcile would violate the
+        # dry-run contract.
         ahead = _commits_ahead()
         if ahead > 0:
-            print(f"pre-flight (dry-run): {ahead} commit(s) ahead of remote; would attempt push")
+            print(f"pre-flight (dry-run, ahead-only): {ahead} commit(s) ahead of cached origin/main; would attempt push")
         else:
-            print("pre-flight (dry-run): clean (0 commits ahead)")
+            print("pre-flight (dry-run, ahead-only): clean (0 commits ahead of cached origin/main)")
         published_ids = {b.get("id") for b in briefs if b.get("id")}
         candidates = discover_work(today, max_backlog, START_FLOOR, published_ids)
         if not candidates:
