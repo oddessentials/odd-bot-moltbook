@@ -84,6 +84,7 @@ from src.editorial_time import (
     daily_editorial_state,
     is_daily_window_open_for,
 )
+from src.git_sync import reconcile_with_origin
 from src.summarize import (
     Brief,
     DAILY_SLUG,
@@ -729,30 +730,34 @@ def run_daily_publish(
     # local audit state. Idempotent on already-reconciled input.
     _reconcile_finalization(briefs)
 
-    # Pre-flight push — if there are unpushed commits from a prior run,
-    # resolve them BEFORE doing any new work. Persistent failure halts
-    # the run to avoid stacking new commits behind an unresolved push.
-    ahead = _commits_ahead()
-    if ahead > 0:
-        print(f"pre-flight: {ahead} commit(s) ahead of remote; attempting push")
-        ok, push_status = _try_push()
-        if not ok:
-            _write_run_state({
-                "phase": "pre-flight-halt",
-                "ts": started.isoformat(),
-                "today": today.isoformat(),
-                "commit": _head_sha(),
-                "commits_ahead": ahead,
-                "push": "deferred-blocking-from-prior-run",
-                "detail": push_status,
-            })
-            print(
-                f"pre-flight push failed ({push_status}); halting before "
-                "daily flow to avoid stacking commits. "
-                "Resolve the push manually, then next run proceeds normally."
-            )
-            return 0
-        print("pre-flight push ok; continuing into daily flow")
+    # Pre-flight reconciliation — fetch origin/main, fast-forward if
+    # behind, push if ahead, rebase if diverged with bot-owned commits
+    # only, halt otherwise. Closes the 2026-05-02 race where the prior
+    # day's x-post sidecar advanced origin and the next morning's daily
+    # committed on stale HEAD; see src/git_sync.py.
+    recon = reconcile_with_origin()
+    if not recon.is_ok:
+        _write_run_state({
+            "phase": "pre-flight-halt",
+            "ts": started.isoformat(),
+            "today": today.isoformat(),
+            "commit": _head_sha(),
+            "ahead": recon.ahead,
+            "behind": recon.behind,
+            "reconcile_action": recon.action,
+            "reconcile_detail": recon.detail,
+        })
+        print(
+            f"pre-flight reconcile HALT ({recon.action}: {recon.detail}); "
+            f"ahead={recon.ahead} behind={recon.behind}. Halting before "
+            "daily flow. Resolve manually, then next run proceeds normally."
+        )
+        return 0
+    if recon.action != "noop":
+        print(
+            f"pre-flight reconcile ok ({recon.action}); ahead={recon.ahead} "
+            f"behind={recon.behind}. Continuing into daily flow."
+        )
 
     # Discover work. `briefs` was already loaded at function entry.
     published_ids = {b.get("id") for b in briefs if b.get("id")}

@@ -120,44 +120,51 @@ exec >>"$LOG_FILE" 2>&1
 echo "----"
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh start"
 
-# Pre-flight push. If the prior run committed locally but the push
-# failed (network blip, GH momentary outage), HEAD is ahead of
-# origin/main with an episode commit that podcast-x-post.yml never
-# saw. Without this guard, the next invocation would compute the
-# next_episode_id from the LOCAL episodes.json (which already
-# includes the unpushed episode) and generate a brand-new episode —
-# burning Anthropic + ElevenLabs + Hedra credits while the previous
-# episode silently piles up unpushed commits.
+# Pre-flight reconciliation. Fetches origin/main, fast-forwards if
+# behind (the common case after a prior x-post sidecar landed),
+# pushes if ahead (recovery from a prior failed push), rebases if
+# diverged with bot-owned commits only, halts on dirty worktree or
+# any non-bot-owned divergence. Closes the 2026-05-02 race where the
+# prior day's x-post sidecar advanced origin and the next morning's
+# daily committed on stale local HEAD; see src/git_sync.py.
 #
-# Recovery posture: push the prior commit, then EXIT before
-# generating new content. The downstream x-post fires on the
-# now-pushed commit. The next scheduled cadence (or RunAtLoad
-# invocation) picks up the steady-state monotonic id.
-#
-# Fetch first so `@{u}` reflects ACTUAL origin/main, not the
-# locally-cached refs. Without fetch the ahead-check still detects
-# local unpushed work, but it can't see remote drift (e.g., a manual
-# operator push between the daily 05:00 and the weekly 09:00). Fetch
-# failure is non-fatal — the local ahead-check still has value, and
-# the post-run push will surface any remote-drift conflict loudly.
-git fetch origin main 2>&1 | sed 's/^/  fetch: /' || true
-AHEAD=$(git rev-list "@{u}..HEAD" --count 2>/dev/null || echo 0)
-if [ "$AHEAD" -gt 0 ]; then
-    echo "  pre-flight: $AHEAD local commit(s) ahead of origin/main."
-    echo "  pushing first to fire the prior run's downstream x-post"
-    echo "  before considering any new content generation."
-    if ! git push origin main; then
-        echo "  WARN: pre-flight push failed. Refusing to generate new content"
-        echo "        while local episode commits are unpushed. Operator:"
-        echo "        diagnose (network? auth? branch protection?), then re-run."
+# Recovery posture is unchanged: if reconcile resulted in a push
+# (action=push or action=rebase), exit WITHOUT generating new content
+# — the downstream podcast-x-post fires on the now-pushed commit, and
+# the next scheduled cadence (or RunAtLoad invocation) picks up
+# steady-state. action=fast-forward and action=noop continue into the
+# cadence guard.
+RECON_OUT=$("$REPO_ROOT/.venv/bin/python" -m src.git_sync reconcile 2>&1) || RECON_RC=$?
+RECON_RC="${RECON_RC:-0}"
+echo "$RECON_OUT" | sed 's/^/  /'
+RECON_STATUS=$(echo "$RECON_OUT" | grep '^STATUS:' | tail -1)
+case "$RECON_STATUS" in
+    STATUS:ok:noop*|STATUS:ok:fast-forward*)
+        # Local already matches origin (or just fast-forwarded). Safe
+        # to continue into the cadence guard and content generation.
+        :
+        ;;
+    STATUS:ok:push*|STATUS:ok:rebase*)
+        # We pushed local commits to origin. The downstream
+        # podcast-x-post workflow fires on that push; exit so we don't
+        # generate a new episode on top of the just-pushed one.
+        echo "  pushed prior commit(s); exiting WITHOUT generating new content."
+        echo "  the next scheduled cadence picks up steady-state."
+        echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh finished (pre-flight reconcile push)"
+        exit 0
+        ;;
+    STATUS:halt:*)
+        echo "  refusing to generate new content while pre-flight reconcile is halted."
+        echo "  Operator: diagnose ($RECON_STATUS) and re-run; halts are intentionally"
+        echo "  conservative — no Anthropic/ElevenLabs/Hedra spend until resolved."
+        echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh finished (pre-flight reconcile halt)"
+        exit 0
+        ;;
+    *)
+        echo "  unexpected reconcile output (rc=$RECON_RC); refusing to proceed."
         exit 1
-    fi
-    echo "  pushed; podcast-x-post.yml will fire on the pushed commit."
-    echo "  exiting WITHOUT generating new content — the next scheduled"
-    echo "  cadence picks up steady-state."
-    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh finished (pre-flight push only)"
-    exit 0
-fi
+        ;;
+esac
 
 # Cadence guard. After pre-flight (which exits the wrapper if it had to
 # push), this is the cheap-Python check that protects against
