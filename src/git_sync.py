@@ -9,9 +9,12 @@ local diverged 1↔1 from origin and halting every subsequent run.
 
 Contract:
 
+  - Wrong-branch precondition. HEAD must be on `branch`. Otherwise
+    push/rebase/merge would target the wrong remote ref. → halt:wrong-branch.
   - Clean-worktree precondition. Tracked-file modifications or staged
     changes → halt:dirty-worktree. Refuses to fetch/merge/rebase/push
-    over operator WIP.
+    over operator WIP. Untracked files do NOT trigger this — they
+    survive rebase/ff.
   - `git fetch origin <branch>`. Failure → halt:fetch-failed.
   - Compare HEAD to origin/<branch>:
       (0, 0)              → ok:noop
@@ -88,6 +91,16 @@ def _git(
         text=True,
         cwd=cwd,
     )
+
+
+def _current_branch(cwd: str | None = None) -> str:
+    """Return the current branch name, or "HEAD" if detached.
+
+    Used by the wrong-branch guard: reconcile is only safe if HEAD's
+    branch matches the branch we're reconciling against, otherwise
+    push/rebase target the wrong remote ref.
+    """
+    return _git("rev-parse", "--abbrev-ref", "HEAD", cwd=cwd).stdout.strip()
 
 
 def _is_worktree_clean(cwd: str | None = None) -> bool:
@@ -177,7 +190,21 @@ def reconcile_with_origin(
     like rev-list output that can't be parsed — both of which are bugs,
     not runtime conditions.
     """
-    # 1. Clean-worktree precondition. Protects operator WIP from being
+    # 1. Wrong-branch guard. Reconcile takes target-branch arg but
+    #    push/rebase/merge act on whatever HEAD currently is. If HEAD's
+    #    branch doesn't match `branch`, the operations would target
+    #    the wrong remote ref. The daily/weekly wrappers already check
+    #    this externally, but defense-in-depth: refuse here too so the
+    #    function is safe to call from any context.
+    head_branch = _current_branch(cwd=cwd)
+    if head_branch != branch:
+        return ReconcileResult(
+            status="halt",
+            action="wrong-branch",
+            detail=f"HEAD={head_branch}, expected={branch}",
+        )
+
+    # 2. Clean-worktree precondition. Protects operator WIP from being
     #    fast-forwarded or rebased over. Daily/weekly wrappers run from
     #    a clean tree by contract; if dirty, something upstream is
     #    wrong and the operator should investigate before automation

@@ -252,6 +252,33 @@ class TestReconcilePushAhead(ReconcileTestBase):
         self.assertEqual(self._local_head(), self._origin_head())
 
 
+class TestReconcileWrongBranch(ReconcileTestBase):
+    def test_head_on_other_branch_halts(self) -> None:
+        # Defense-in-depth: even though the daily/weekly wrappers have
+        # external branch guards, the function itself must refuse to
+        # operate when HEAD doesn't match the configured branch.
+        # Otherwise push/rebase target the wrong remote ref.
+        _git("checkout", "-b", "feature/some-work", cwd=self.local_path)
+        before = self._local_head()
+
+        result = self._reconcile()
+
+        self.assertEqual(result.status, "halt")
+        self.assertEqual(result.action, "wrong-branch")
+        self.assertIn("feature/some-work", result.detail)
+        self.assertEqual(self._local_head(), before)
+
+    def test_detached_head_halts(self) -> None:
+        head_sha = self._local_head()
+        _git("checkout", "--detach", head_sha, cwd=self.local_path)
+
+        result = self._reconcile()
+
+        self.assertEqual(result.status, "halt")
+        self.assertEqual(result.action, "wrong-branch")
+        self.assertIn("HEAD=HEAD", result.detail)
+
+
 class TestReconcileDirtyWorktree(ReconcileTestBase):
     def test_modified_tracked_file_halts_before_fetch(self) -> None:
         # Operator left a tracked file modified; the precondition must
