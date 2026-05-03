@@ -683,9 +683,17 @@ def run_daily_publish(
     # plans/incident-2026-04-29-runatload-utc.md.
     today, _ = daily_editorial_state(started)
 
-    # Load briefs.json once at the top — used for reconciliation and
-    # discovery. The pre-flight push doesn't modify briefs.json content,
-    # so no reload is needed.
+    # Load briefs.json at function entry. This snapshot drives the
+    # dry-run report and the pre-reconcile finalization step. In the
+    # real flow, reconcile_with_origin (below) may fast-forward or
+    # rebase tracked content into the local checkout, which can change
+    # data/briefs.json on disk (e.g., an operator pushed an edit
+    # between daily runs, or a future bot type writes briefs.json).
+    # When that happens, this in-memory snapshot is stale and MUST be
+    # refreshed before any publish decision (`published_ids`,
+    # `discover_work`) or any later write of `briefs` back to disk —
+    # otherwise the orchestrator silently overwrites tracked origin
+    # edits. The reload happens after the reconcile call below.
     briefs = _load_briefs()
 
     # --- Dry-run path (READ-ONLY) -------------------------------------------
@@ -766,8 +774,17 @@ def run_daily_publish(
             f"pre-flight reconcile ok ({recon.action}); ahead={recon.ahead} "
             f"behind={recon.behind}. Continuing into daily flow."
         )
+        # Reconcile mutated the local checkout (fast-forward / rebase /
+        # push). data/briefs.json on disk may now differ from the
+        # snapshot loaded at function entry. Reload before any publish
+        # decision or later write of `briefs` back to disk; otherwise
+        # we'd compute `published_ids` from a stale set, miss any
+        # entries reconcile pulled in from origin, and at the post-
+        # discover write step overwrite tracked origin edits with the
+        # stale in-memory list.
+        briefs = _load_briefs()
 
-    # Discover work. `briefs` was already loaded at function entry.
+    # Discover work using the (possibly reloaded) briefs.
     published_ids = {b.get("id") for b in briefs if b.get("id")}
     candidates = discover_work(today, max_backlog, START_FLOOR, published_ids)
 

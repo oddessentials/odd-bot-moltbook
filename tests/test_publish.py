@@ -681,5 +681,75 @@ class TestEditorialTimeGuard(unittest.TestCase):
         )
 
 
+class TestReloadBriefsAfterReconcileMutatesCheckout(unittest.TestCase):
+    """Regression test for the stale in-memory briefs bug — Codex
+    stop-time finding on PR #16.
+
+    When `reconcile_with_origin` fast-forwards or rebases between
+    daily runs, `data/briefs.json` on disk may have changed (operator
+    pushed a brief edit, future bot type writes briefs.json, etc.).
+    Without reloading, the orchestrator computes `published_ids` from
+    the pre-reconcile in-memory list, misses any entries reconcile
+    pulled in from origin, and at the post-discover write step
+    overwrites tracked origin edits — silent data loss.
+
+    The fix reloads `briefs` from disk after a non-noop reconcile.
+    """
+
+    def test_post_reconcile_briefs_drive_published_ids(self) -> None:
+        from src.git_sync import ReconcileResult
+
+        # Pre-reconcile snapshot: briefs through 2026-04-30 only.
+        briefs_before = [{"id": "2026-04-30", "status": "published"}]
+        # Post-reconcile state: an additional 2026-05-01 entry that
+        # reconcile pulled in from origin between this run and the
+        # prior daily. If the orchestrator acted on `briefs_before`,
+        # it would later overwrite the operator's edit.
+        briefs_after = [
+            {"id": "2026-04-30", "status": "published"},
+            {"id": "2026-05-01", "status": "published"},
+        ]
+
+        captured: dict[str, set[str]] = {}
+
+        def fake_discover_work(today, max_backlog, floor, published_ids):
+            captured["published_ids"] = set(published_ids)
+            return []  # no candidates → orchestrator exits cleanly
+
+        now = datetime(2026, 5, 1, 14, 0, tzinfo=timezone.utc)
+        with mock.patch(
+            "src.publish._load_briefs",
+            side_effect=[briefs_before, briefs_after],
+        ) as load_briefs_mock, mock.patch(
+            "src.publish.reconcile_with_origin",
+            return_value=ReconcileResult(
+                status="ok", action="fast-forward", behind=1
+            ),
+        ), mock.patch(
+            "src.publish._reconcile_finalization"
+        ), mock.patch(
+            "src.publish.discover_work", side_effect=fake_discover_work
+        ), mock.patch(
+            "src.publish._write_run_state"
+        ), mock.patch(
+            "src.publish._head_sha", return_value="deadbeef"
+        ):
+            rc = run_daily_publish(dry_run=False, now_utc=now)
+
+        self.assertEqual(rc, 0)
+        # Reload contract: _load_briefs called once at function entry
+        # AND once again after the non-noop reconcile.
+        self.assertEqual(load_briefs_mock.call_count, 2)
+        # Discovery exclusion set was computed from POST-reconcile
+        # briefs. Without the fix, captured["published_ids"] would be
+        # {"2026-04-30"} only (the pre-reconcile snapshot), and the
+        # orchestrator would treat 2026-05-01 as unpublished — then
+        # the post-discover write at L879 would clobber the operator's
+        # edit by writing the stale in-memory list back to briefs.json.
+        self.assertEqual(
+            captured["published_ids"], {"2026-04-30", "2026-05-01"}
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
