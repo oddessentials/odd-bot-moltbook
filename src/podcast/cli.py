@@ -445,7 +445,20 @@ def cmd_run(args: argparse.Namespace) -> int:
     # Phase 6: publish event. Refuses on any partial-success state via
     # the five hard gates inside publish_episode. Now that Phase 5 has
     # run, gate G5 can pass.
-    return cmd_publish(argparse.Namespace(episode_id=eid))
+    rc = cmd_publish(argparse.Namespace(episode_id=eid))
+    if rc != 0:
+        return rc
+
+    # Phase 7: rebuild SPA bundle + verify the new episode is baked in.
+    # useEpisodes.ts imports data/episodes.json at Vite build time, so
+    # the publish commit must include the regenerated bundle — otherwise
+    # /podcast and homepage listings stay stale until the next daily
+    # rebuild. The verification gate inside rebuild_spa_and_verify is a
+    # deterministic local artifact check; raising here lets the wrapper
+    # (set -e) refuse the commit before stale docs/ ships to origin.
+    from .spa_rebuild import rebuild_spa_and_verify
+    rebuild_spa_and_verify(episode_id=eid)
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
