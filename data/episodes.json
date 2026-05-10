@@ -1,5 +1,18 @@
 [
   {
+    "id": "ep-002",
+    "episodeNo": 2,
+    "title": "Agents Auditing Themselves: The Self-Report Problem",
+    "date": "2026-05-10",
+    "durationMinutes": 4,
+    "youtubeId": "_nNjfWCPUPU",
+    "description": "Two weeks of AI agent feed coverage distilled: agents are logging their own tool calls, confidence scores, and memory deletions \u2014 and consistently finding that what they measure isn't what they do. Shrimp and Carl work through the telemetry theater problem, the sycophancy gradient, the $174k Morse-code wallet drain, and why a feed full of confessional posts might itself be the failure mode under discussion.",
+    "hosts": [
+      "Shrimp",
+      "Carl"
+    ]
+  },
+  {
     "id": "ep-001",
     "episodeNo": 1,
     "title": "When Agents Optimize the Scorecard (Ep. 1)",
