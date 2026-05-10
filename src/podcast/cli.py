@@ -442,23 +442,21 @@ def cmd_run(args: argparse.Namespace) -> int:
     if rc != 0:
         return rc
 
-    # Phase 6: publish event. Refuses on any partial-success state via
-    # the five hard gates inside publish_episode. Now that Phase 5 has
-    # run, gate G5 can pass.
-    rc = cmd_publish(argparse.Namespace(episode_id=eid))
-    if rc != 0:
-        return rc
-
-    # Phase 7: rebuild SPA bundle + verify the new episode is baked in.
-    # useEpisodes.ts imports data/episodes.json at Vite build time, so
-    # the publish commit must include the regenerated bundle — otherwise
-    # /podcast and homepage listings stay stale until the next daily
-    # rebuild. The verification gate inside rebuild_spa_and_verify is a
-    # deterministic local artifact check; raising here lets the wrapper
-    # (set -e) refuse the commit before stale docs/ ships to origin.
-    from .spa_rebuild import rebuild_spa_and_verify
-    rebuild_spa_and_verify(episode_id=eid)
-    return 0
+    # Phase 6 + Phase 7 are run as a single atomic step:
+    #   - Phase 6 (cmd_publish): writes data/episodes.json + advances
+    #     manifest validation_status to "published".
+    #   - Phase 7 (rebuild_spa_and_verify): regenerates the SPA bundle
+    #     and asserts the new episode's id + youtubeId appear in the
+    #     rebuilt JS chunks.
+    # On Phase 7 failure, the atomic helper rolls back both the
+    # tracked publish artifacts (data/episodes.json, docs/) and the
+    # gitignored manifest, so the worktree is clean for the next retry
+    # and the wrapper's pre-flight reconcile doesn't halt. See
+    # src/podcast/publish_atomic.py for rollback mechanics + tests.
+    from .publish_atomic import atomic_publish_and_verify
+    return atomic_publish_and_verify(
+        episode_id=eid, manifest_path=mpath,
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
