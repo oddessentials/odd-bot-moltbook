@@ -238,7 +238,14 @@ fi
 # never tweeted. cmd_run is idempotent on rerun, so nothing to commit
 # means nothing to push — the `git diff --cached --quiet` gate makes
 # this a no-op when there's no new content.
-git add data/episodes.json docs/podcast
+#
+# docs/ (not just docs/podcast) goes in the commit: cmd_run's Phase 7
+# rebuilt the SPA, so docs/index.html, docs/assets/*, docs/brief/*,
+# docs/404.html, and docs/podcast/* all need to land together. The
+# in-process verification gate (rebuild_spa_and_verify) has already
+# confirmed the bundle contains this episode's id + youtubeId; if it
+# didn't, cmd_run raised and `set -e` killed the wrapper before this.
+git add data/episodes.json docs/
 if git diff --cached --quiet; then
     echo "  no public-surface changes — nothing to commit, nothing to push."
 else
