@@ -140,12 +140,28 @@ class TestMostRecentWeeklyWindowDate(unittest.TestCase):
 
 
 class TestWeeklyWindowSatisfied(unittest.TestCase):
-    """`weekly_window_satisfied` => REFUSE the run."""
+    """`weekly_window_satisfied` => REFUSE the run.
+
+    Two refusal conditions, both layered into "satisfied":
+      (a) current local time is not inside an open weekly window
+          (non-Sunday, or Sunday before WEEKLY_WINDOW_HOUR);
+      (b) inside an open window, but the latest publish already
+          covers it.
+    """
 
     def test_first_publish_eligible(self):
-        # No prior episode → never satisfied → wrapper proceeds.
+        # No prior episode → not yet satisfied → wrapper proceeds. Must
+        # still be inside an open window: Sunday 09:00 is the canonical
+        # case.
         self.assertFalse(
             weekly_window_satisfied(_local(2026, 5, 3, 9, 0), None),
+        )
+
+    def test_sunday_09_00_proceeds_with_no_prior_publish(self):
+        # Sunday 09:00 ET, latest=None → window open, nothing to
+        # satisfy → proceed.
+        self.assertFalse(
+            weekly_window_satisfied(_local(2026, 5, 10, 9, 0), None),
         )
 
     def test_sunday_09_00_after_previous_week_publish_proceeds(self):
@@ -167,18 +183,31 @@ class TestWeeklyWindowSatisfied(unittest.TestCase):
         )
 
     def test_sunday_morning_before_window_refuses(self):
-        # Sunday before 09:00 — the window hasn't opened. Most-recent
-        # opening is the previous Sunday, which the latest publish
-        # already filled.
+        # Sunday before 09:00 — the window hasn't opened. Refuse on
+        # day/hour grounds regardless of prior-publish state.
         self.assertTrue(
             weekly_window_satisfied(
                 _local(2026, 5, 3, 4, 0), date(2026, 4, 26),
             ),
         )
 
+    def test_sunday_08_59_refuses_no_prior_publish(self):
+        # One minute before window opens, with no prior publish at all.
+        # Pre-fix this returned False (no prior publish ever satisfied);
+        # post-fix it must refuse on hour grounds — the window isn't open.
+        self.assertTrue(
+            weekly_window_satisfied(_local(2026, 5, 10, 8, 59), None),
+        )
+
+    def test_sunday_09_00_proceeds_no_prior_publish(self):
+        # First minute the window is open, with no prior publish ever.
+        # Boundary case: hour=9 is at-or-after WEEKLY_WINDOW_HOUR.
+        self.assertFalse(
+            weekly_window_satisfied(_local(2026, 5, 10, 9, 0), None),
+        )
+
     def test_saturday_evening_reboot_refuses(self):
-        # The exact incident shape applied to the podcast pipeline. A
-        # late-Saturday reboot one week after a Sunday publish must NOT
+        # A late-Saturday reboot one week after a Sunday publish must NOT
         # be eligible — the current weekly window doesn't open until
         # tomorrow at 09:00 EDT.
         self.assertTrue(
@@ -187,11 +216,46 @@ class TestWeeklyWindowSatisfied(unittest.TestCase):
             ),
         )
 
+    def test_saturday_evening_after_missed_sunday_refuses(self):
+        # The exact 2026-05-09→05-10 incident shape: latest publish on a
+        # Tuesday (ep-001 manual proof, 2026-04-28), the 2026-05-03 Sunday
+        # window was missed (cadence-days refused), and a Saturday
+        # 22:57 ET reboot fires. Pre-fix this returned False (latest
+        # 04-28 < most-recent-window 05-03 → "not satisfied" → PROCEED)
+        # and the wrapper started script-gen / TTS spend. Post-fix the
+        # day-of-week gate refuses before money is spent.
+        self.assertTrue(
+            weekly_window_satisfied(
+                _local(2026, 5, 9, 22, 57), date(2026, 4, 28),
+            ),
+        )
+
+    def test_midweek_reboot_refuses_regardless_of_publish_state(self):
+        # Wed 14:00 reboot. Day-of-week is the load-bearing reason to
+        # refuse — even if the most-recent Sunday hasn't published yet,
+        # midweek is not when we publish.
+        self.assertTrue(
+            weekly_window_satisfied(
+                _local(2026, 5, 6, 14, 0), date(2026, 4, 28),
+            ),
+        )
+
     def test_already_published_this_window_refuses(self):
-        # Tuesday 14:00 reboot, this past Sunday already published.
+        # Tuesday 14:00 reboot. Refuse on day-of-week (not Sunday)
+        # AND on already-filled grounds — either is sufficient.
         self.assertTrue(
             weekly_window_satisfied(
                 _local(2026, 4, 28, 14, 0), date(2026, 4, 26),
+            ),
+        )
+
+    def test_sunday_09_00_with_today_publish_refuses(self):
+        # Sunday 09:00 fire, but episodes.json already records today.
+        # Inside an open window AND already filled → refuse on the
+        # already-satisfied branch.
+        self.assertTrue(
+            weekly_window_satisfied(
+                _local(2026, 5, 10, 9, 0), date(2026, 5, 10),
             ),
         )
 
