@@ -107,14 +107,32 @@ def most_recent_weekly_window_date(now_utc: datetime) -> date:
 def weekly_window_satisfied(
     now_utc: datetime, latest_publish_date: date | None,
 ) -> bool:
-    """Return True iff the current weekly publish window has already been
-    filled by `latest_publish_date`.
+    """Return True iff the wrapper should REFUSE the run on weekly-window
+    grounds.
 
-    The wrapper should REFUSE the run when this returns True. When False,
-    the wrapper may proceed (subject to its other guards). `None` means
-    "no episode has ever published" — never satisfied; first publish is
-    eligible as soon as a window has opened.
+    Two refusal conditions, both folded into "satisfied":
+
+      1. We are not inside an open weekly publish window — i.e., local
+         day-of-week is not Sunday OR local time is before
+         `WEEKLY_WINDOW_HOUR`. A late-Saturday or pre-09:00-Sunday
+         RunAtLoad must refuse here so script-gen / TTS / Hedra /
+         YouTube spend never starts.
+      2. We are inside an open window, but `latest_publish_date` already
+         covers it.
+
+    Returns False (wrapper proceeds) only when the current local
+    instant is at-or-after this Sunday's 09:00 anchor AND the latest
+    publish does not already fill that window. `None` for
+    `latest_publish_date` means "no prior publish" — eligible only
+    when condition (1) is also satisfied.
     """
+    if now_utc.tzinfo is None:
+        raise ValueError("now_utc must be timezone-aware")
+    now_local = now_utc.astimezone(EDITORIAL_TZ)
+    if now_local.weekday() != WEEKLY_WINDOW_WEEKDAY:
+        return True
+    if now_local.hour < WEEKLY_WINDOW_HOUR:
+        return True
     if latest_publish_date is None:
         return False
     return latest_publish_date >= most_recent_weekly_window_date(now_utc)

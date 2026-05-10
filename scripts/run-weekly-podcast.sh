@@ -109,11 +109,15 @@ export HTTPS_PROXY="http://127.0.0.1:8080"
 export HTTP_PROXY="http://127.0.0.1:8080"
 export NO_PROXY="github.com,api.github.com,*.github.com,api.hedra.com,*.hedra.com,api.elevenlabs.io,*.elevenlabs.io,googleapis.com,*.googleapis.com,*.amazonaws.com"
 
-MITM_CA="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"
-if [ -f "$MITM_CA" ]; then
-    export SSL_CERT_FILE="$MITM_CA"
-    export REQUESTS_CA_BUNDLE="$MITM_CA"
-fi
+# Combined CA bundle = certifi public roots + mitm CA (when present).
+# Exporting only the mitm CA breaks NO_PROXY-bypassed services (their
+# real public-CA-signed certs cannot be validated against a 1-CA file);
+# exporting only certifi breaks mitm-routed traffic. The helper
+# materializes both into one PEM and prints its path. See
+# `src/ca_bundle.py` for rationale.
+COMBINED_CA="$("$REPO_ROOT/.venv/bin/python" -m src.ca_bundle)"
+export SSL_CERT_FILE="$COMBINED_CA"
+export REQUESTS_CA_BUNDLE="$COMBINED_CA"
 
 exec >>"$LOG_FILE" 2>&1
 
@@ -174,54 +178,14 @@ esac
 # Cadence guard. After pre-flight (which exits the wrapper if it had to
 # push), this is the cheap-Python check that protects against
 # RunAtLoad-induced over-firing on Mac mini reboots between Sundays.
-# Reads the most-recent entry by episodeNo from data/episodes.json,
-# compares its `date` to today. PROCEED if >= MIN_DAYS old or no
-# prior episode; REFUSE otherwise. Malformed episodes.json or bad
-# date → Python raises → bash exits 1 (operator investigates).
-CADENCE_RESULT=$(MIN_DAYS="$MIN_DAYS" "$REPO_ROOT/.venv/bin/python" -c '
-import json, os, sys
-from datetime import date, datetime, timezone
-from pathlib import Path
-
-from src.editorial_time import weekly_window_satisfied
-
-min_days = int(os.environ["MIN_DAYS"])
-ep_path = Path("data/episodes.json")
-if not ep_path.exists():
-    print("PROCEED:no_episodes_json"); sys.exit(0)
-entries = json.loads(ep_path.read_text())
-if not entries:
-    print("PROCEED:empty_episodes"); sys.exit(0)
-latest = max(entries, key=lambda e: e.get("episodeNo", 0))
-# Missing / empty / malformed date is a corruption signal, not a
-# "permissively proceed" case — letting the guard PROCEED on a bad
-# entry would re-introduce the over-fire hazard the guard exists to
-# prevent. date.fromisoformat raises on None / "" / unparseable
-# strings; bash sees no PROCEED|REFUSE prefix on stdout and exits 1
-# via the wildcard case below.
-latest_date_str = latest.get("date")
-latest_date = date.fromisoformat(latest_date_str)
-days_since = (date.today() - latest_date).days
-latest_id = latest.get("id") or "unknown"
-
-# (1) Operator-tunable days-since gate. Cheap floor against rapid
-#     manual reinvocation.
-if days_since < min_days:
-    print(f"REFUSE:cadence:{days_since}:{latest_id}:{latest_date_str}")
-    sys.exit(0)
-
-# (2) Editorial-window gate. The weekly publish window opens at
-#     Sunday 09:00 America/New_York; refuse any fire whose most-recent
-#     window has already been filled by the latest publish. Anchored
-#     to local clock time, not UTC, so a Mac mini reboot crossing the
-#     UTC date boundary cannot pre-fire the next window. See
-#     plans/incident-2026-04-29-runatload-utc.md.
-if weekly_window_satisfied(datetime.now(timezone.utc), latest_date):
-    print(f"REFUSE:window:{days_since}:{latest_id}:{latest_date_str}")
-    sys.exit(0)
-
-print(f"PROCEED:{days_since}:{latest_id}:{latest_date_str}")
-')
+# Two layered checks (see src/podcast_cadence_guard.py):
+#   1. days-since: refuse if today_local - latest.date < MIN_DAYS.
+#   2. weekly-window: refuse if local time is not Sunday at-or-after
+#      WEEKLY_WINDOW_HOUR ET, or if the open window is already filled.
+# Malformed episodes.json or bad date → Python raises → bash sees no
+# PROCEED|REFUSE prefix on stdout and exits 1 via the wildcard case.
+CADENCE_RESULT=$("$REPO_ROOT/.venv/bin/python" -m src.podcast_cadence_guard \
+    --min-days "$MIN_DAYS")
 
 if [ "${FORCE:-}" = "1" ]; then
     echo "  cadence guard: FORCE=1 — bypassing ($CADENCE_RESULT)"
