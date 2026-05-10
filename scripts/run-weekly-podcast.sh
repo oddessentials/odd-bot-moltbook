@@ -49,6 +49,14 @@ MIN_DAYS=6
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# launchd's default PATH is /usr/bin:/bin:/usr/sbin:/sbin and excludes
+# Homebrew (/opt/homebrew/bin on Apple Silicon, /usr/local/bin on Intel).
+# The orchestrator's media stage shells out to ffmpeg + ffprobe via
+# subprocess; without these on PATH every segment's canary validation
+# fails with FileNotFoundError. The 2026-05-10 rerun caught this latent
+# bug after the TLS + window fixes unblocked the media stage.
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 LOG_DIR="$REPO_ROOT/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/podcast-weekly.log"
