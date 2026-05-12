@@ -38,7 +38,7 @@ from src.publish import (
     merge_brief,
     run_daily_publish,
 )
-from src.summarize import STANDARD_DISCLAIMER
+from src.summarize import Brief, STANDARD_DISCLAIMER
 
 
 # Mirrors agent-brief/client/index.html's <head> block: the seven targeted tags
@@ -749,6 +749,193 @@ class TestReloadBriefsAfterReconcileMutatesCheckout(unittest.TestCase):
         self.assertEqual(
             captured["published_ids"], {"2026-04-30", "2026-05-01"}
         )
+
+
+class TestEmptyLiveFetchCleanSkip(unittest.TestCase):
+    """Regression test for the 2026-05-11 incident — RunAtLoad after UTC
+    midnight caused the live API's `time=day` window to return no rows
+    that fell inside the orchestrator's requested UTC-calendar-day
+    window. `persist_raw([])` previously crashed DuckDB's `executemany`;
+    the fix makes that path a safe no-op, after which `filter_and_rank`
+    raises the documented zero-posts ValueError and `run_daily` returns
+    None.
+
+    These tests assert the orchestrator-level contract: an empty live
+    fetch becomes a clean per-date skip, not an exception, and does not
+    block a separately-eligible orphan-draft candidate in the same run.
+    """
+
+    def test_today_only_empty_fetch_exits_cleanly(self) -> None:
+        """Single candidate (today); `run_daily` returns None (the
+        graceful empty-filter signal from summarize). Orchestrator must
+        log a skip and exit 0 with no commit attempted.
+        """
+        from src.git_sync import ReconcileResult
+
+        today_iso = "2026-05-11"
+        # 14:00 UTC = 10:00 EDT — well past 05:00 local, so the editorial
+        # window is open and the per-date guard passes.
+        now = datetime(2026, 5, 11, 14, 0, tzinfo=timezone.utc)
+
+        write_state_calls: list[dict] = []
+
+        def fake_discover_work(today, max_backlog, floor, published_ids):
+            return [today]  # today-only candidate
+
+        def fake_run_daily(date_iso, source):
+            self.assertEqual(date_iso, today_iso)
+            self.assertEqual(source, "live-api")
+            return None  # empty filter; no draft produced
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), mock.patch(
+            "src.publish._load_briefs", return_value=[]
+        ), mock.patch(
+            "src.publish.reconcile_with_origin",
+            return_value=ReconcileResult(status="ok", action="noop"),
+        ), mock.patch(
+            "src.publish._reconcile_finalization"
+        ), mock.patch(
+            "src.publish.discover_work", side_effect=fake_discover_work
+        ), mock.patch(
+            "src.publish._draft_path"
+        ) as draft_path_mock, mock.patch(
+            "src.publish.run_daily", side_effect=fake_run_daily
+        ) as run_daily_mock, mock.patch(
+            "src.publish._atomic_write_text"
+        ) as atomic_write_mock, mock.patch(
+            "src.publish._run_build"
+        ) as run_build_mock, mock.patch(
+            "src.publish._git"
+        ) as git_mock, mock.patch(
+            "src.publish._write_run_state",
+            side_effect=lambda s: write_state_calls.append(s),
+        ), mock.patch(
+            "src.publish._head_sha", return_value="deadbeef"
+        ):
+            # _draft_path(today).exists() must return False so the loop
+            # takes the `d == today` live-fetch branch rather than orphan
+            # promotion.
+            draft_path_mock.return_value.exists.return_value = False
+            rc = run_daily_publish(dry_run=False, now_utc=now)
+
+        out = buf.getvalue()
+        self.assertEqual(rc, 0)
+        run_daily_mock.assert_called_once_with(today_iso, source="live-api")
+        # The orchestrator MUST log the skip and then the no-new-entries
+        # clean-exit line — never raise.
+        self.assertIn(f"{today_iso}: empty filter, no draft produced; skipping", out)
+        self.assertIn("no new entries this run; clean exit", out)
+        # No commit pipeline must run when proposed_per_date is empty.
+        atomic_write_mock.assert_not_called()
+        run_build_mock.assert_not_called()
+        git_mock.assert_not_called()
+        # Telemetry: phase=complete, published=[], live_fetch_invocations=1.
+        self.assertEqual(len(write_state_calls), 1)
+        state = write_state_calls[0]
+        self.assertEqual(state["phase"], "complete")
+        self.assertEqual(state["published"], [])
+        self.assertEqual(state["live_fetch_invocations"], 1)
+
+    def test_empty_today_does_not_block_orphan_promotion(self) -> None:
+        """Backlog-loop regression: candidates = [past_with_draft, today].
+        `past` orphan-promotes; today's `run_daily` returns None. The
+        orchestrator must still publish past, not abort the run.
+        """
+        from src.git_sync import ReconcileResult
+
+        past_iso = "2026-05-10"
+        today_iso = "2026-05-11"
+        past_date = date(2026, 5, 10)
+        today_date = date(2026, 5, 11)
+        now = datetime(2026, 5, 11, 14, 0, tzinfo=timezone.utc)
+
+        past_brief = Brief(
+            id=past_iso,
+            issueNo=131,
+            date=past_iso,
+            title="May 10 — orphan promotion",
+            dek="d",
+            readingMinutes=1,
+            tags=["Agents"],
+            items=[],
+            status="draft",
+            disclaimer=STANDARD_DISCLAIMER,
+            isSeed=None,
+        )
+
+        captured_briefs_writes: list[str] = []
+        write_state_calls: list[dict] = []
+
+        def fake_discover_work(today, max_backlog, floor, published_ids):
+            return [past_date, today_date]
+
+        def fake_draft_path(d):
+            m = mock.MagicMock()
+            m.exists.return_value = (d == past_date)
+            return m
+
+        def fake_run_daily(date_iso, source):
+            self.assertEqual(date_iso, today_iso)
+            return None
+
+        def fake_atomic_write(path, content):
+            if str(path).endswith("briefs.json"):
+                captured_briefs_writes.append(content)
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), mock.patch(
+            "src.publish._load_briefs", return_value=[]
+        ), mock.patch(
+            "src.publish.reconcile_with_origin",
+            return_value=ReconcileResult(status="ok", action="noop"),
+        ), mock.patch(
+            "src.publish._reconcile_finalization"
+        ), mock.patch(
+            "src.publish.discover_work", side_effect=fake_discover_work
+        ), mock.patch(
+            "src.publish._draft_path", side_effect=fake_draft_path
+        ), mock.patch(
+            "src.publish._load_draft", return_value=past_brief
+        ), mock.patch(
+            "src.publish.run_daily", side_effect=fake_run_daily
+        ), mock.patch(
+            "src.publish._atomic_write_text", side_effect=fake_atomic_write
+        ), mock.patch(
+            "src.publish._run_build"
+        ), mock.patch(
+            "src.publish._git"
+        ), mock.patch(
+            "src.publish._working_tree_clean", return_value=True
+        ), mock.patch(
+            "src.publish._flip_draft_to_published"
+        ), mock.patch(
+            "src.publish.append_run_record"
+        ), mock.patch(
+            "src.publish._try_push", return_value=(True, "ok")
+        ), mock.patch(
+            "src.publish._write_run_state",
+            side_effect=lambda s: write_state_calls.append(s),
+        ), mock.patch(
+            "src.publish._head_sha", return_value="deadbeef"
+        ):
+            rc = run_daily_publish(dry_run=False, now_utc=now)
+
+        out = buf.getvalue()
+        self.assertEqual(rc, 0)
+        # Past was orphan-promoted; today was skipped on empty filter.
+        self.assertIn(f"{past_iso}: orphan-draft promotion", out)
+        self.assertIn(f"{today_iso}: empty filter, no draft produced; skipping", out)
+        # briefs.json was written exactly once with the past entry
+        # only — today must NOT appear.
+        self.assertEqual(len(captured_briefs_writes), 1)
+        written = json.loads(captured_briefs_writes[0])
+        written_ids = [b["id"] for b in written]
+        self.assertEqual(written_ids, [past_iso])
+        # Run-state telemetry mirrors the published set.
+        self.assertEqual(len(write_state_calls), 1)
+        self.assertEqual(write_state_calls[0]["published"], [past_iso])
+        self.assertEqual(write_state_calls[0]["push"], "ok")
 
 
 if __name__ == "__main__":

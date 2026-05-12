@@ -265,7 +265,17 @@ def filter_and_rank(posts: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def persist_raw(posts: list[dict[str, Any]], run_id: str, db_path: Path) -> None:
-    """Write the full merged set to `posts_raw` for replayability."""
+    """Write the full merged set to `posts_raw` for replayability.
+
+    Empty `posts` is a valid outcome of the upstream fetch — e.g., a
+    `RunAtLoad` boot after UTC midnight where the live API's
+    `time=day` window yields no rows that fall inside the orchestrator's
+    requested UTC-calendar-day window. The table is still ensured (so
+    later runs and queries see a consistent schema) and the function
+    returns cleanly. Downstream `filter_and_rank` then raises the
+    documented `"filter produced zero posts; upstream drift"` ValueError,
+    which `summarize.run_daily` already handles as a clean no-draft skip.
+    """
     db_path.parent.mkdir(parents=True, exist_ok=True)
     con = duckdb.connect(str(db_path))
     try:
@@ -279,6 +289,8 @@ def persist_raw(posts: list[dict[str, Any]], run_id: str, db_path: Path) -> None
             )
             """
         )
+        if not posts:
+            return
         con.executemany(
             "INSERT OR REPLACE INTO posts_raw VALUES (?, ?, ?)",
             [(run_id, p["id"], json.dumps(p)) for p in posts],
