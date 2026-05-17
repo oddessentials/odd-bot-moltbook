@@ -201,3 +201,14 @@ These are NOT plan-lock blockers but ARE load-bearing for build. Each must be re
 - `git push` under launchd uses `osxkeychain` credential helper (proven for daily). Same applies for weekly.
 - `~/.openclaw/keys/` is the established secret-storage location.
 - Mac mini bare runtime (not containerized) — every decision's blast radius must be contained.
+
+---
+
+## 2026-05-17 cadence retune
+
+The 2026-05-17 weekly cadence fire exhausted Hedra Creator-tier credits partway through ep-003 (HTTP 402 mid-episode on segments 13–15). Operator decision: stay on Creator tier, retune the publish cadence to bi-weekly so monthly Hedra spend fits in the 5,400-credit allocation with retry headroom.
+
+- `scripts/run-weekly-podcast.sh` constant `MIN_DAYS` raised from 6 to 13. Refuses the first Sunday after a publish at days_since=7; permits the next weekly Sunday fire at days_since=14. Net effect: every-other-Sunday emergent publish cadence given the existing weekly launchd fire.
+- File/plist/log names left as `*weekly*` — the launchd fire is still weekly; only the publish cadence is bi-weekly.
+- User-facing copy (About.tsx, Podcast.tsx) and the script-gen system prompt (`src/podcast/scripting.py`) updated in the same pass to say "every other week" / "bi-weekly" where the prior text claimed weekly or twice-a-week.
+- Phase 4 sizing math in this plan ("4 weekly × 3 min = 12 min already over budget") is superseded by this retune: 2 episodes/month × ~1,500 credits ≈ 3,000 credits, well inside the 5,400-credit Creator allotment.

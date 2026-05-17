@@ -26,7 +26,7 @@ operator.
 
 Entrypoint:
 
-    python -m src.podcast_cadence_guard --min-days 6
+    python -m src.podcast_cadence_guard --min-days 13
 """
 
 from __future__ import annotations
