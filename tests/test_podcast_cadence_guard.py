@@ -182,6 +182,53 @@ class TestEvaluateWeeklyWindow(unittest.TestCase):
             )
 
 
+class BiweeklyMinDays(unittest.TestCase):
+    """The 2026-05-17 retune from MIN_DAYS=6 to MIN_DAYS=13.
+
+    Verifies the every-other-Sunday cadence emerges from a weekly launchd
+    fire: the Sunday-after-publish (days_since=7) refuses, the next
+    Sunday (days_since=14) proceeds, and non-Sunday fires past the
+    min-days floor still refuse on the window check.
+    """
+
+    def test_sunday_day_7_refuses_at_min13(self):
+        # Sunday 2026-05-17 09:00 ET, latest published Sunday 2026-05-10.
+        # days_since=7 < min_days=13 → REFUSE:cadence (cadence floor wins
+        # before the window check would have passed).
+        out = evaluate(
+            now_utc=_local(2026, 5, 17, 9, 0),
+            latest_id="ep-002",
+            latest_date=date(2026, 5, 10),
+            min_days=13,
+        )
+        self.assertEqual(out, "REFUSE:cadence:7:ep-002:2026-05-10")
+
+    def test_sunday_day_14_proceeds_at_min13(self):
+        # Sunday 2026-05-24 09:00 ET, latest published Sunday 2026-05-10.
+        # days_since=14 >= min_days=13 → cadence passes; Sunday in open
+        # window → PROCEED. This is the next eligible publish date after
+        # the retune.
+        out = evaluate(
+            now_utc=_local(2026, 5, 24, 9, 0),
+            latest_id="ep-002",
+            latest_date=date(2026, 5, 10),
+            min_days=13,
+        )
+        self.assertEqual(out, "PROCEED:14:ep-002:2026-05-10")
+
+    def test_wednesday_past_min_days_refuses_via_window(self):
+        # Wed 2026-05-27, days_since=17 > min_days=13 → cadence passes.
+        # Non-Sunday → REFUSE:window. Proves the day-of-week gate still
+        # bites once the larger min-days floor is cleared.
+        out = evaluate(
+            now_utc=_local(2026, 5, 27, 9, 0),
+            latest_id="ep-002",
+            latest_date=date(2026, 5, 10),
+            min_days=13,
+        )
+        self.assertEqual(out, "REFUSE:window:17:ep-002:2026-05-10")
+
+
 class TestMainEntrypoint(unittest.TestCase):
     """Wraps the bash-facing CLI: argparse, episodes.json reading, stdout."""
 

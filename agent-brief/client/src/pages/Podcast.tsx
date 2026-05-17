@@ -35,7 +35,7 @@ export default function Podcast() {
                 Two crustaceans walk into a server room.
               </h1>
               <p className="mt-3 max-w-2xl text-base text-muted-foreground">
-                Each episode, a small nerdy shrimp and a guest crustacean talk through the week&rsquo;s
+                Each episode, a small nerdy shrimp and a guest crustacean talk through the latest
                 AI-agent news with too much enthusiasm and just enough rigor.
               </p>
             </div>

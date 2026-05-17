@@ -1,6 +1,6 @@
 """Anthropic tool-use call that produces a validated EpisodeScript.
 
-System prompt is cache-controlled (ephemeral) so steady-state weekly runs
+System prompt is cache-controlled (ephemeral) so steady-state bi-weekly runs
 amortise it. Output enforcement is via the tool input_schema with the cast
 slugs supplied as the speaker enum, so the model can't emit speakers
 outside the cast contract. One Pydantic-validation retry on schema
@@ -26,7 +26,7 @@ def _anthropic_client() -> anthropic.Anthropic:
 
 
 _SCRIPT_SYSTEM_PROMPT = """\
-You are the writer for the Odd Essentials weekly AI-news video podcast.
+You are the writer for the Odd Essentials bi-weekly AI-news video podcast.
 
 The show: a short (~3 minute) animated video commentary on developments in
 the AI agent ecosystem, voiced by anthropomorphic crustacean hosts. Each

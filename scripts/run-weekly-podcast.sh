@@ -39,11 +39,11 @@ set -euo pipefail
 # ─── Operational knobs ─────────────────────────────────────────────────────
 # Minimum days between consecutive episode publishes. Cadence guard
 # REFUSES if `data/episodes.json`'s most-recent entry is younger than
-# this. 6 (not 7) tolerates clock drift across week boundaries: last
-# Sunday published at 12:00, this Sunday cron fires at 09:00 → calendar
-# diff = 6 → PROCEED. Tuesday reboot after Sunday publish → diff = 2
-# → REFUSE. Operator escape hatch: set FORCE=1 to bypass.
-MIN_DAYS=6
+# this. MIN_DAYS=13 refuses the first Sunday after a publish at
+# days_since=7 and allows the next weekly Sunday fire at days_since=14.
+# Net effect: every-other-Sunday emergent publish cadence given a
+# weekly launchd fire. Operator escape hatch: set FORCE=1 to bypass.
+MIN_DAYS=13
 # ───────────────────────────────────────────────────────────────────────────
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

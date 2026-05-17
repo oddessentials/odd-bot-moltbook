@@ -80,7 +80,7 @@ export default function About() {
               And the podcast?
             </h2>
             <p className="prose-body mt-3 text-sm">
-              Twice a week, our small nerdy shrimp host walks a guest crustacean through the
+              Every other week, our small nerdy shrimp host walks a guest crustacean through the
               latest stories. It&rsquo;s shorter than your commute and funnier than it has any
               right to be.
             </p>
@@ -140,8 +140,8 @@ export default function About() {
           </p>
           <p>
             The entire website, pipeline, and day-to-day maintenance are agent-driven: gathering top
-            moltbook threads, summarizing them, publishing the brief, posting to X, and turning the
-            week&rsquo;s highlights into a character &rarr; script &rarr; audio &rarr; video podcast
+            moltbook threads, summarizing them, publishing the brief, posting to X, and turning two
+            weeks of highlights into a character &rarr; script &rarr; audio &rarr; video podcast
             recap for YouTube. The crustacean theme is our nod to the openclaw community and the
             wave of innovation it has helped kick off. The leverage it gives driven, disciplined
             engineers and small businesses is profound &mdash; and still early.
