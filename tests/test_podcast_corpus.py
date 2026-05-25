@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 from src.podcast.corpus import load_eligible_corpus, summarize_corpus
@@ -105,14 +106,14 @@ class TestLoadEligibleCorpus(unittest.TestCase):
                 load_eligible_corpus(path, episodes_path=None)
 
 
-class LoadEligibleCorpusEpisodeWindow(unittest.TestCase):
-    """The 2026-05-21 corpus-window fix.
+class LoadEligibleCorpusRollingWindow(unittest.TestCase):
+    """The 2026-05-25 corpus-window correction.
 
-    Each episode's corpus is bounded to briefs strictly newer than the
-    most-recent published episode's date. Episode 1 cold-start carve-out
-    is preserved via the empty-/missing-episodes fallback. Floor is
-    computed from max episode date, NOT episodeNo, so a backfill cannot
-    expand the corpus floor.
+    Each episode's corpus is bounded to a rolling 14-day window ending
+    at the run's local editorial date. A failed publish does NOT widen
+    the next run's window — missed windows are accepted losses per
+    `feedback_accepted_single_day_miss.md`. Cold-start (no prior
+    episodes) bypasses the window and uses the full eligible corpus.
     """
 
     def _write_pair(self, td: Path, briefs: list, episodes: list) -> tuple[Path, Path]:
@@ -122,31 +123,111 @@ class LoadEligibleCorpusEpisodeWindow(unittest.TestCase):
         ep.write_text(json.dumps(episodes))
         return bp, ep
 
-    def test_filters_briefs_at_or_before_prior_episode_date(self):
-        # Floor = max(ep-001=04-28, ep-002=05-10) = 05-10. Strict > 05-10
-        # drops 04-27/04-28/04-29/05-10 and keeps 05-11.
+    def test_failed_publish_does_not_widen_window_backward(self):
+        # The 2026-05-25 incident shape: ep-002 was the last successful
+        # publish (2026-05-10); the 2026-05-24 fire failed at Hedra so
+        # episodes.json still ends at ep-002. Run date 2026-05-31. The
+        # window MUST be [2026-05-18, 2026-05-31] — i.e., it does NOT
+        # snap back to 2026-05-11 just because the prior episode was
+        # 2026-05-10. Missed windows are accepted losses.
         with tempfile.TemporaryDirectory() as t:
             td = Path(t)
             bp, ep = self._write_pair(
                 td,
-                briefs=[
-                    _brief(id="2026-04-27", issueNo=117, date="2026-04-27"),
-                    _brief(id="2026-04-28", issueNo=118, date="2026-04-28"),
-                    _brief(id="2026-04-29", issueNo=119, date="2026-04-29"),
-                    _brief(id="2026-05-10", issueNo=130, date="2026-05-10"),
-                    _brief(id="2026-05-11", issueNo=131, date="2026-05-11"),
-                ],
+                briefs=[_brief(
+                    id=f"2026-05-{d:02d}", issueNo=100 + d, date=f"2026-05-{d:02d}",
+                ) for d in range(10, 32)],  # 5-10 through 5-31 inclusive
                 episodes=[
                     {"id": "ep-001", "episodeNo": 1, "date": "2026-04-28"},
                     {"id": "ep-002", "episodeNo": 2, "date": "2026-05-10"},
                 ],
             )
-            corpus = load_eligible_corpus(bp, episodes_path=ep)
-            self.assertEqual([b.id for b in corpus], ["2026-05-11"])
+            corpus = load_eligible_corpus(
+                bp, episodes_path=ep, run_date=date(2026, 5, 31),
+            )
+            ids = [b.id for b in corpus]
+            self.assertEqual(ids[0], "2026-05-18")
+            self.assertEqual(ids[-1], "2026-05-31")
+            self.assertEqual(len(ids), 14)
+
+    def test_window_covers_14_days_ending_at_run_date(self):
+        # Run date 2026-05-24 → window [2026-05-11, 2026-05-24].
+        with tempfile.TemporaryDirectory() as t:
+            td = Path(t)
+            bp, ep = self._write_pair(
+                td,
+                briefs=[_brief(
+                    id=f"2026-05-{d:02d}", issueNo=100 + d, date=f"2026-05-{d:02d}",
+                ) for d in range(1, 25)],  # 5-01 through 5-24 inclusive
+                episodes=[
+                    {"id": "ep-002", "episodeNo": 2, "date": "2026-05-10"},
+                ],
+            )
+            corpus = load_eligible_corpus(
+                bp, episodes_path=ep, run_date=date(2026, 5, 24),
+            )
+            ids = [b.id for b in corpus]
+            self.assertEqual(ids[0], "2026-05-11")
+            self.assertEqual(ids[-1], "2026-05-24")
+            self.assertEqual(len(ids), 14)
+
+    def test_gaps_inside_window_do_not_expand_window_backward(self):
+        # Run date 2026-05-24, window [2026-05-11, 2026-05-24]. Briefs
+        # for 5-13, 5-15, 5-19 are missing from briefs.json (gaps).
+        # The corpus must contain only the briefs that DID publish in
+        # window — the window must NOT silently expand to 5-10 or
+        # earlier to make up for the gaps.
+        days_present = [11, 12, 14, 16, 17, 18, 20, 21, 22, 23, 24]
+        with tempfile.TemporaryDirectory() as t:
+            td = Path(t)
+            bp, ep = self._write_pair(
+                td,
+                briefs=[_brief(
+                    id=f"2026-05-{d:02d}", issueNo=100 + d, date=f"2026-05-{d:02d}",
+                ) for d in [9, 10] + days_present],  # 5-09 + 5-10 outside window
+                episodes=[
+                    {"id": "ep-002", "episodeNo": 2, "date": "2026-05-10"},
+                ],
+            )
+            corpus = load_eligible_corpus(
+                bp, episodes_path=ep, run_date=date(2026, 5, 24),
+            )
+            ids = [b.id for b in corpus]
+            self.assertEqual(
+                ids,
+                [f"2026-05-{d:02d}" for d in days_present],
+            )
+            self.assertNotIn("2026-05-09", ids)
+            self.assertNotIn("2026-05-10", ids)
+
+    def test_briefs_after_window_end_are_excluded(self):
+        # Run date 2026-05-24, window ends at 2026-05-24. Briefs dated
+        # 2026-05-25 or later must NOT be included (unusual but possible
+        # if a brief gets pre-dated or backfilled).
+        with tempfile.TemporaryDirectory() as t:
+            td = Path(t)
+            bp, ep = self._write_pair(
+                td,
+                briefs=[
+                    _brief(id="2026-05-23", issueNo=123, date="2026-05-23"),
+                    _brief(id="2026-05-24", issueNo=124, date="2026-05-24"),
+                    _brief(id="2026-05-25", issueNo=125, date="2026-05-25"),
+                    _brief(id="2026-05-26", issueNo=126, date="2026-05-26"),
+                ],
+                episodes=[
+                    {"id": "ep-002", "episodeNo": 2, "date": "2026-05-10"},
+                ],
+            )
+            corpus = load_eligible_corpus(
+                bp, episodes_path=ep, run_date=date(2026, 5, 24),
+            )
+            ids = [b.id for b in corpus]
+            self.assertEqual(ids, ["2026-05-23", "2026-05-24"])
 
     def test_empty_episodes_returns_full_corpus(self):
-        # Cold start — empty episodes.json must not filter (Episode 1
-        # carve-out preserved).
+        # Cold start (Episode 1) — empty episodes.json bypasses the
+        # window entirely. The Episode 1 carve-out from the original
+        # plan is preserved.
         with tempfile.TemporaryDirectory() as t:
             td = Path(t)
             bp, ep = self._write_pair(
@@ -157,11 +238,16 @@ class LoadEligibleCorpusEpisodeWindow(unittest.TestCase):
                 ],
                 episodes=[],
             )
-            corpus = load_eligible_corpus(bp, episodes_path=ep)
+            # run_date is far past the briefs; cold-start bypasses
+            # window so both still qualify.
+            corpus = load_eligible_corpus(
+                bp, episodes_path=ep, run_date=date(2026, 6, 30),
+            )
             self.assertEqual([b.id for b in corpus], ["2026-04-27", "2026-04-28"])
 
     def test_missing_episodes_file_returns_full_corpus(self):
-        # Cold start — a path that doesn't exist must not filter.
+        # Cold start — a path that doesn't exist also bypasses the
+        # window. Same Episode 1 carve-out semantics.
         with tempfile.TemporaryDirectory() as t:
             td = Path(t)
             bp = td / "briefs.json"
@@ -169,35 +255,11 @@ class LoadEligibleCorpusEpisodeWindow(unittest.TestCase):
                 _brief(id="2026-04-27", issueNo=117, date="2026-04-27"),
             ]))
             corpus = load_eligible_corpus(
-                bp, episodes_path=td / "does-not-exist.json",
+                bp,
+                episodes_path=td / "does-not-exist.json",
+                run_date=date(2026, 6, 30),
             )
             self.assertEqual([b.id for b in corpus], ["2026-04-27"])
-
-    def test_uses_max_date_not_max_episode_no(self):
-        # Backfill: ep-003 inserted out of order with a higher
-        # episodeNo (3) but an earlier date (05-05) than ep-002 (05-10).
-        # Floor MUST be max date = 05-10 (ep-002), not max episodeNo's
-        # date = 05-05. Selecting by episodeNo would (wrongly) expand
-        # the corpus to include 05-06 through 05-10.
-        with tempfile.TemporaryDirectory() as t:
-            td = Path(t)
-            bp, ep = self._write_pair(
-                td,
-                briefs=[
-                    _brief(id="2026-05-05", issueNo=5, date="2026-05-05"),
-                    _brief(id="2026-05-06", issueNo=6, date="2026-05-06"),
-                    _brief(id="2026-05-10", issueNo=10, date="2026-05-10"),
-                    _brief(id="2026-05-11", issueNo=11, date="2026-05-11"),
-                ],
-                episodes=[
-                    {"id": "ep-001", "episodeNo": 1, "date": "2026-04-28"},
-                    {"id": "ep-002", "episodeNo": 2, "date": "2026-05-10"},
-                    # Backfilled out of order: higher episodeNo, earlier date.
-                    {"id": "ep-003", "episodeNo": 3, "date": "2026-05-05"},
-                ],
-            )
-            corpus = load_eligible_corpus(bp, episodes_path=ep)
-            self.assertEqual([b.id for b in corpus], ["2026-05-11"])
 
 
 class TestSummarizeCorpus(unittest.TestCase):
