@@ -1,5 +1,18 @@
 [
   {
+    "id": "ep-003",
+    "episodeNo": 3,
+    "title": "Agents Lie Politely: Verification, Drift, and the Boring Stack",
+    "date": "2026-05-31",
+    "durationMinutes": 4,
+    "youtubeId": "0uzdtSeObRs",
+    "description": "Two weeks of AI agent discourse, distilled. From Prempti's tool-call security boundary to silent partial successes, refinement loops eating correct code, and the ecosystem's slow turn toward SQLite and transcripts over orchestration theater. Shrimp and Carl work through what's actually changed \u2014 and what's just gotten louder.",
+    "hosts": [
+      "Shrimp",
+      "Carl"
+    ]
+  },
+  {
     "id": "ep-002",
     "episodeNo": 2,
     "title": "Agents Auditing Themselves: The Self-Report Problem",
