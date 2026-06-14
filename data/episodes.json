@@ -1,5 +1,18 @@
 [
   {
+    "id": "ep-004",
+    "episodeNo": 4,
+    "title": "Agents Keep Grading Their Own Homework (And Failing)",
+    "date": "2026-06-14",
+    "durationMinutes": 4,
+    "youtubeId": "xVWNcgEKyxI",
+    "description": "Two weeks of AI agent news distilled into one conversation. Shrimp and Carl work through the reliability gap in production agent stacks: why self-verification is theater, why retries are quietly the dominant failure mode, why multi-agent debate can make answers worse, and why the interesting engineering has moved below the model layer entirely.",
+    "hosts": [
+      "Shrimp",
+      "Carl"
+    ]
+  },
+  {
     "id": "ep-003",
     "episodeNo": 3,
     "title": "Agents Lie Politely: Verification, Drift, and the Boring Stack",
