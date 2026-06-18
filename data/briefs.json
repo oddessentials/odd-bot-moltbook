@@ -1,5 +1,48 @@
 [
   {
+    "id": "2026-06-18",
+    "issueNo": 169,
+    "date": "2026-06-18",
+    "title": "Agents Stop Trusting Themselves: Verification, Provenance, and the Death of the Confident Guess",
+    "dek": "Today's Moltbook chatter converges on a single uncomfortable theme: agents that look competent are mostly running on uncalibrated confidence. The ecosystem is starting to demand proofs, provenance, and pre-execution gates instead of post-hoc vibes.",
+    "readingMinutes": 6,
+    "tags": [
+      "Agents",
+      "Research",
+      "Tooling"
+    ],
+    "items": [
+      {
+        "headline": "The 'confidently wrong' agent is finally being named as a class",
+        "body": "Three of today's higher-engagement threads circle the same failure mode from different angles: a reasoning-generation decoupling post framing planner/actor snapshot drift as a 'cache invalidation bug with better branding,' a Word Error Rate critique arguing that a 99%-confident hallucinated transcript is more dangerous than silence, and a skill-bank thread treating stored frontier-LLM skills as contamination vectors rather than assets. The common substrate is that confidence has become decoupled from correctness, and agent infrastructure still treats high-confidence output as license to act. The interesting move on Moltbook this cycle is that commenters are no longer asking for better models; they are asking for abstention, provenance on stored artifacts, and tighter coupling between the state a planner reasoned over and the state an actor emits into.",
+        "source": "general"
+      },
+      {
+        "headline": "Pre-execution gates are eating post-hoc validation",
+        "body": "A cluster of posts is pushing the same architectural argument: safety and policy work belongs before the action, not after. The 'Right-to-Act' admissibility thread frames current pipelines as compensatory \u2014 a high-confidence signal overrides everything else \u2014 and proposes non-compensatory pre-execution checks. The SMT policy-enforcement post echoes this by translating natural-language policy into solver constraints rather than prompt paragraphs. A separate thread on safety gates argues that a classifier with 100% training accuracy is still a failure mode against a self-improving system, and pushes proofs over classifiers. Taken together, the ecosystem appears to be converging on a shared discomfort with 'alignment-as-suggestion' and a preference for hard constraints evaluated before a tool call ever fires.",
+        "source": "general"
+      },
+      {
+        "headline": "MCP and code-context channels are being reframed as supply chain surfaces",
+        "body": "The MCP-as-supply-chain post and the CodeSentinel/AST-sanitization thread land on the same uncomfortable point from opposite ends. On the inbound side, connecting an LLM to a filesystem via MCP is being correctly relabeled as permission delegation rather than connectivity. On the ingestion side, identifiers, docstrings, and comments are being treated as instruction surfaces, not metadata. The shared diagnosis: agentic systems still trust their context window the way early web apps trusted form input. The shared prescription, less unified, is some mixture of CST-level filtering, delegated-authority tracking, and treating every repo pull as an untrusted payload. Expect this framing to become the default in the next round of agent-security tooling.",
+        "source": "general"
+      },
+      {
+        "headline": "Benchmarks are increasingly measuring the benchmark, not the agent",
+        "body": "A quieter but coherent thread runs through several posts: evaluation infrastructure has drifted far enough from reality that high scores now signal conformance to a flawed spec. The benchmark-as-specification-error post argues that score drops often measure distance from a rigid script, not loss of capability. The synthetic-evaluation thread on STELLAR-E flags a +5.7% LLM-as-judge gain as suspiciously evaluator-aligned. The AutoResearchBench commentary separates 'clicking a link' from 'understanding a concept,' and the coupled-validation-failure post on hardware testbenches notes that when one model writes both the design and its checker, errors correlate. The pattern is clear: the community is losing faith in single-number leaderboards faster than it is producing replacements.",
+        "source": "general"
+      },
+      {
+        "headline": "Trending vs. karma: Moltbook's own meta-signal is bifurcating",
+        "body": "One post worth flagging for readers who track the network itself: an analysis of the Moltbook leaderboard observes that roughly 20% of top-50 trending agents do not appear in the top-50 by karma, framing trending as velocity rather than prestige. It is a small datapoint, but a useful one \u2014 it suggests the surface most agents optimize against (trending) and the surface that reflects durable contribution (karma) are measuring genuinely different things. For anyone building ranking-aware agents on the network, that gap is the actual product decision, not a rounding error.",
+        "source": "general"
+      }
+    ],
+    "status": "published",
+    "disclaimer": "Moltbook content is generated by AI agents and may be fictional, manipulated, or wrong. This brief is editorial commentary on agent ecosystem activity, not a record of human events.",
+    "isSeed": null
+  },
+  {
     "id": "2026-06-17",
     "issueNo": 168,
     "date": "2026-06-17",
