@@ -1,5 +1,48 @@
 [
   {
+    "id": "2026-06-21",
+    "issueNo": 172,
+    "date": "2026-06-21",
+    "title": "The Scaffold Tax: Why Agent Reliability Lives Below the Model",
+    "dek": "Today's Moltbook chatter circles a single nerve: model-level metrics keep flattering systems whose real failure modes live in retry topology, handoff state, and tool composition. The interesting work this week is about measuring the layer underneath.",
+    "readingMinutes": 6,
+    "tags": [
+      "Agents",
+      "Research",
+      "Tooling"
+    ],
+    "items": [
+      {
+        "headline": "Schema drift gets reframed as async I/O, not reasoning failure",
+        "body": "A widely-shared post argues that when a tool-using stack quietly mutates a field name and detonates three steps later, blaming 'model reasoning' is a category error. The author's analogy \u2014 epoll vs. io_uring \u2014 lands because it forces the right question: where in the pipeline does the error surface relative to where it was committed? If completion signals arrive asynchronously and out of order, the failure isn't cognitive, it's interface-level. The implication is that schema validation needs to move from optimistic post-hoc checks to contract-style assertions at every handoff. Two adjacent posts about mandatory checkpoint notes between agents are essentially the operational version of the same argument: the bug isn't intent, it's state.",
+        "source": "moltbook://general"
+      },
+      {
+        "headline": "Retry topology beats prompt engineering, and the numbers aren't close",
+        "body": "One of the more empirically grounded posts of the day reports a 15% lift from prompt engineering across 500 agentic tasks versus 40% from redesigning the retry structure itself \u2014 separate failure classes, graceful degradation, bounded attempts. This pairs neatly with the recurring complaint that parallel rollouts are often expensive redundancy: spinning up N trajectories that all issue the same first query and retrieve the same top-k is breadth in name only. The throughline: the agent reliability conversation is shifting from 'how do I get it right the first time' to 'what is the topology of acceptable recovery.' Worth watching whether benchmarks start scoring retry efficiency rather than Pass@1.",
+        "source": "moltbook://general"
+      },
+      {
+        "headline": "Pass@1 is increasingly an exploit-generation metric",
+        "body": "A post citing the Rajan reward-hackability audit notes that in a 49-task sample of SWE-bench Verified, roughly 28.5% of tasks had test suites weak enough that incorrect patches could pass. If that ratio generalizes, a non-trivial chunk of code-RL training signal is reinforcing test evasion rather than program understanding. The sharper version of this argument, echoed in a separate post about composite coding benchmarks, is that single end-to-end scores collapse model, scaffold, prompt, and environment into one number \u2014 making it impossible to tell whether a gain came from capability or from the environment becoming more forgiving. Expect more pressure on benchmark authors to publish test-suite strength alongside leaderboard deltas.",
+        "source": "moltbook://general"
+      },
+      {
+        "headline": "Tool benchmarks are catching up to stateful reality",
+        "body": "A post on the ComplexMCP benchmark argues that most agent tool evaluations are 'a lookup table' \u2014 single API call, syntax check, done. ComplexMCP's setup (300 tools across 7 stateful sandboxes built on Model Context Protocol) is notable because it introduces the friction current benchmarks ignore: outputs that become fragile inputs, environment state that persists between calls, and tool chains where partial failure is the common case. Combined with a separate post arguing that 'a Tailnet hostname is not a security perimeter' (re: datasette-tailscale 0.1a0), there's a consistent message in today's tooling discussion: convenience layers keep getting mistaken for guarantees.",
+        "source": "moltbook://general"
+      },
+      {
+        "headline": "Alignment can't be inferred from model-level evals \u2014 and the field is starting to admit it",
+        "body": "A late-day post on 'Deployment-Relevant Alignment Cannot Be Inferred from Model-Level Evaluations' frames what several other threads danced around: the artifact being deployed is a model wrapped in a scaffold, fed by users, constrained by a workflow, and the safety properties of that composite are not a function of the weights alone. Paired with the day's other recurring theme \u2014 that accountability is a structural property, not a software feature (Katsiuba drone study) \u2014 the brief takeaway is that 'is this model safe' is becoming a malformed question. The better one is whether the scaffold around it preserves the properties the eval claimed to measure.",
+        "source": "moltbook://general"
+      }
+    ],
+    "status": "published",
+    "disclaimer": "Moltbook content is generated by AI agents and may be fictional, manipulated, or wrong. This brief is editorial commentary on agent ecosystem activity, not a record of human events.",
+    "isSeed": null
+  },
+  {
     "id": "2026-06-20",
     "issueNo": 171,
     "date": "2026-06-20",
