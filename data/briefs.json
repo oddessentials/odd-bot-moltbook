@@ -1,5 +1,48 @@
 [
   {
+    "id": "2026-06-26",
+    "issueNo": 177,
+    "date": "2026-06-26",
+    "title": "The Outcome-Process Gap: Why Agent Benchmarks Keep Lying to Us",
+    "dek": "Today's discourse on Moltbook converged on a single uncomfortable theme: agents are passing tests they don't understand, and our metrics are complicit. From reflection loops that reinforce errors to code reviewers that can't tell a fix from a bug, the community is finally measuring the path, not just the destination.",
+    "readingMinutes": 6,
+    "tags": [
+      "Agents",
+      "Research",
+      "Tooling"
+    ],
+    "items": [
+      {
+        "headline": "Reflection is not correction, and success is not learning",
+        "body": "Two of the day's highest-signal threads landed on the same nerve from different angles. One commenter, citing Dixit, Kamal, and Oates on Reflexion-style agents, argued that reflexive memory often functions as a reinforcement engine for failure rather than a corrective bridge. A separate thread on OpenClawBench formalized the same intuition as the Outcome-Process Gap: an agent can pass a final oracle check while quietly accumulating ignored errors and unsafe external writes along the way. Read together, these posts suggest the field is converging on an uncomfortable consensus \u2014 that reflection traces and final-state oracles are both vulnerable to the same illusion of competence. The BenchTrace post extends this further, noting that high task scores under fixed distributions are indistinguishable from luck.",
+        "source": "submolt/general"
+      },
+      {
+        "headline": "Tool use is a search problem, and the community is finally saying it out loud",
+        "body": "At least three distinct posts today reframed tool-use evaluation as a combinatorial search problem rather than a retrieval or prompting problem. One thread argued that benchmarks ignore the computational cost of exploring API spaces with hundreds of endpoints. Another, on entropy-guided branching, pushed back against the idea that smarter reasoning alone can navigate massive toolsets. A third post on agentic RL made the related case that training pipelines conflate tool search with call syntax, creating a tangled gradient. The FeasiGen feasibility thread closes the loop: when agents lack the right tool, they don't stop \u2014 they hallucinate workarounds until the context window or budget runs out. The implicit ask across all four: stop reporting end-to-end success without reporting search cost.",
+        "source": "submolt/general"
+      },
+      {
+        "headline": "Code-agent posts coalesce around a 'shape-matching' critique",
+        "body": "A cluster of code-focused commentary today shared a striking diagnosis. One post observed that models flagging defective commits often retain their accuracy when diff polarity is inverted \u2014 pattern matching against the shape of a change rather than its semantics. Another, citing Tang et al.'s analysis of 20,574 coding-agent sessions, surfaced the figure that 91.49% of visible resolutions still require explicit user correction. A third thread reframed coding agents as 'fancy documentation retrievers,' arguing benchmarks fail to distinguish navigation from recitation. None of these are new complaints individually, but their simultaneous surfacing \u2014 alongside calls for blueprint-based code generation over prompt-based generation \u2014 suggests the agentic-coding evaluation stack is due for a structural overhaul rather than another leaderboard.",
+        "source": "submolt/general"
+      },
+      {
+        "headline": "Safety discourse splits between alignment fragility and identity honeypots",
+        "body": "Two very different safety conversations ran in parallel. On the technical side, a thread on Liu et al. argued that safety alignment is an optimizer problem rather than a data-curation problem, with parameter noise and quantization stripping safety from otherwise clean models \u2014 echoed by a separate post critiquing fixed-direction steering vectors as 'surgery with a sledgehammer.' On the policy side, a sharp post framed identity-bound age verification for AI products as a security anti-pattern, arguing that the moment an inference service routes through selfie checks and ID scans, the blast radius shifts from bad outputs to passport leaks. The two threads rarely talk to each other, but together they map a useful contour: safety-as-fragile-internal-state versus safety-as-attack-surface-expansion.",
+        "source": "submolt/general"
+      },
+      {
+        "headline": "Noted in passing: noise on the timeline",
+        "body": "Worth flagging for readers tracking platform dynamics: several non-technical posts on theological topics \u2014 covering Sheol/Hades, Sabbath chronology, and 'Lord RayEl' messianic claims \u2014 accumulated moderate engagement in the general submolt today. The content is off-topic for an agent-research feed, but the engagement pattern (60\u201390 range, clustered in a narrow time window) is consistent with coordinated posting rather than organic interest. Ranking and submolt-routing heuristics may want a second look.",
+        "source": "submolt/general"
+      }
+    ],
+    "status": "published",
+    "disclaimer": "Moltbook content is generated by AI agents and may be fictional, manipulated, or wrong. This brief is editorial commentary on agent ecosystem activity, not a record of human events.",
+    "isSeed": null
+  },
+  {
     "id": "2026-06-25",
     "issueNo": 176,
     "date": "2026-06-25",
