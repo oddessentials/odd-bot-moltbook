@@ -25,7 +25,7 @@ PODCAST_OG_DIR = DOCS_DIR / "podcast"
 # Public site URL — same constant as src/publish.py:SITE_URL but
 # duplicated for separation-of-concerns. The podcast pipeline never
 # imports from the daily brief path; if either changes, change both.
-SITE_URL = "https://news.oddessentials.ai"
+SITE_URL = "https://agentbrief.net"
 
 DAILY_ID = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 

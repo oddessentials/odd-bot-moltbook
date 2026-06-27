@@ -48,7 +48,7 @@ flowchart TD
     worch -->|"data/episodes.json + docs/podcast/"| repo
     repo(("git push<br/>origin/main"))
 
-    repo -->|GitHub Pages| site["news.oddessentials.ai"]
+    repo -->|GitHub Pages| site["agentbrief.net"]
     repo -->|"on data/briefs.json"| xp1[".github/workflows/x-post.yml"]
     repo -->|"on data/episodes.json"| xp2[".github/workflows/podcast-x-post.yml"]
     xp1 --> x["X · @oddessentials"]

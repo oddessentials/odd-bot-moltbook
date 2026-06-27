@@ -128,7 +128,7 @@ START_FLOOR = date(2026, 4, 27)
 # Canonical site URL — used for per-brief og:url. Mirrors src/post_x.py's
 # X_DOMAIN; the duplication is intentional (publish doesn't import post_x).
 # If you change one, change both.
-SITE_URL = "https://news.oddessentials.ai"
+SITE_URL = "https://agentbrief.net"
 
 # Pre-compiled patterns for the seven meta tags _render_per_brief_html
 # rewrites. Each is attribute-order-insensitive and tolerates `>` vs ` />`

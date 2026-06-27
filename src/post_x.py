@@ -116,7 +116,7 @@ def run_post_x(
     joke_synthesizer: Callable[[dict], str],
     tweet_poster: Callable[[str], str],
     url_prober: Callable[[str], bool],
-    article_url_template: str = "https://news.oddessentials.ai/brief/{id}",
+    article_url_template: str = "https://agentbrief.net/brief/{id}",
     log: Callable[[str], None] = lambda _msg: None,
 ) -> int:
     """End-to-end X-post orchestrator.
@@ -205,7 +205,7 @@ def run_post_x(
 # =============================================================================
 
 CLAUDE_MODEL = "claude-opus-4-7"
-X_DOMAIN = "https://news.oddessentials.ai"
+X_DOMAIN = "https://agentbrief.net"
 TOKEN_ENDPOINT = "https://api.x.com/2/oauth2/token"
 
 _BUNDLE_RE = re.compile(r'<script[^>]+\bsrc="(/assets/index-[^"]+\.js)"')

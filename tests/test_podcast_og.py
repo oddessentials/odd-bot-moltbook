@@ -27,14 +27,14 @@ _TEMPLATE_HTML = """\
     <title>The Agent Brief — Daily AI Agent News</title>
     <meta property="og:title" content="The Agent Brief — Daily AI Agent News" />
     <meta property="og:description" content="A short, daily brief on AI agents." />
-    <meta property="og:image" content="https://news.oddessentials.ai/og-image.png" />
-    <meta property="og:url" content="https://news.oddessentials.ai/" />
+    <meta property="og:image" content="https://agentbrief.net/og-image.png" />
+    <meta property="og:url" content="https://agentbrief.net/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Agent Brief Daily" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="The Agent Brief — Daily AI Agent News" />
     <meta name="twitter:description" content="A short, daily brief on AI agents." />
-    <meta name="twitter:image" content="https://news.oddessentials.ai/og-image.png" />
+    <meta name="twitter:image" content="https://agentbrief.net/og-image.png" />
   </head>
   <body><div id="root"></div></body>
 </html>
@@ -72,7 +72,7 @@ class TestRenderEpisodeOgHtml(unittest.TestCase):
             out,
         )
         self.assertIn(
-            '<meta property="og:url" content="https://news.oddessentials.ai/podcast/ep-001" />',
+            '<meta property="og:url" content="https://agentbrief.net/podcast/ep-001" />',
             out,
         )
         self.assertIn('<meta property="og:type" content="article" />', out)
@@ -82,12 +82,12 @@ class TestRenderEpisodeOgHtml(unittest.TestCase):
         # be touched — brand consistency across the site.
         out = render_episode_og_html(_TEMPLATE_HTML, _record())
         self.assertIn(
-            'property="og:image" content="https://news.oddessentials.ai/og-image.png"',
+            'property="og:image" content="https://agentbrief.net/og-image.png"',
             out,
         )
         self.assertIn('property="og:site_name" content="Agent Brief Daily"', out)
         self.assertIn(
-            'name="twitter:image" content="https://news.oddessentials.ai/og-image.png"',
+            'name="twitter:image" content="https://agentbrief.net/og-image.png"',
             out,
         )
         self.assertIn('name="twitter:card" content="summary_large_image"', out)
@@ -114,9 +114,9 @@ class TestRenderEpisodeOgHtml(unittest.TestCase):
 
     def test_template_with_duplicate_target_tag_raises(self):
         broken = _TEMPLATE_HTML.replace(
-            '<meta property="og:url" content="https://news.oddessentials.ai/" />',
-            '<meta property="og:url" content="https://news.oddessentials.ai/" />\n'
-            '    <meta property="og:url" content="https://news.oddessentials.ai/dupe" />',
+            '<meta property="og:url" content="https://agentbrief.net/" />',
+            '<meta property="og:url" content="https://agentbrief.net/" />\n'
+            '    <meta property="og:url" content="https://agentbrief.net/dupe" />',
         )
         with self.assertRaises(RuntimeError) as cm:
             render_episode_og_html(broken, _record())

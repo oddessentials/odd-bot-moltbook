@@ -155,7 +155,7 @@ The public artifact contains only completed published episodes. Draft / status /
 
 - New workflow `.github/workflows/podcast-x-post.yml` triggered only on `data/episodes.json` push.
 - Mirrors the locked x-post pattern: push-range diff, sidecar dedupe at `data/podcast-x-posts.jsonl`, `[skip ci]` commit-back, latest-id-only posting with `skipped_catchup` rows for older eligible ids.
-- Tweet shape: `<joke>\n<youtube-url>` (or `news.oddessentials.ai/podcast/<id>`). Joke prompt input = Episode `title + description`.
+- Tweet shape: `<joke>\n<youtube-url>` (or `agentbrief.net/podcast/<id>`). Joke prompt input = Episode `title + description`.
 - The existing daily brief X-post workflow stays untouched.
 
 ### Phase 4 — Weekly launchd cadence
