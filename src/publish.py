@@ -143,6 +143,14 @@ _OG_TYPE_RE = re.compile(r'<meta[^>]*\bproperty="og:type"[^>]*/?>', re.IGNORECAS
 _TW_TITLE_RE = re.compile(r'<meta[^>]*\bname="twitter:title"[^>]*/?>', re.IGNORECASE)
 _TW_DESC_RE = re.compile(r'<meta[^>]*\bname="twitter:description"[^>]*/?>', re.IGNORECASE)
 
+# SEO-enrichment anchors (structured data / prerender pass). Canonical + meta
+# description are rewritten in place (template carries homepage defaults);
+# </head> and the empty #root div are injection points.
+_CANONICAL_RE = re.compile(r'<link[^>]*\brel="canonical"[^>]*/?>', re.IGNORECASE)
+_META_DESC_RE = re.compile(r'<meta[^>]*\bname="description"[^>]*/?>', re.IGNORECASE)
+_HEAD_CLOSE_RE = re.compile(r"</head>", re.IGNORECASE)
+_ROOT_DIV_RE = re.compile(r'<div id="root">\s*</div>', re.IGNORECASE)
+
 
 # =============================================================================
 # Pure functions — deterministic, side-effect-free
@@ -450,7 +458,7 @@ def _render_per_brief_html(template_html: str, brief: dict) -> str:
     change that strips or duplicates Card meta surfaces here, not silently
     as broken X cards on the live site.
 
-    Per-brief rewrites:
+    Per-brief rewrites (in place):
       <title>          → "{title} — Agent Brief Daily"
       og:title         → brief.title (HTML-escaped)
       og:description   → "Issue {issueNo} · {dek}" (dek HTML-escaped)
@@ -458,11 +466,22 @@ def _render_per_brief_html(template_html: str, brief: dict) -> str:
       og:type          → "article" (was "website")
       twitter:title    → brief.title (HTML-escaped)
       twitter:description → "Issue {issueNo} · {dek}" (dek HTML-escaped)
+      canonical        → SITE_URL/brief/{id} (template carries homepage default)
+      meta description → brief.dek (template carries homepage default)
+
+    Per-brief injections:
+      before </head>     → article:* OG tags + NewsArticle JSON-LD (src.seo)
+      into <div id=root>  → prerendered article body. The SPA mounts with
+        createRoot().render(), which clears #root, so injected content is
+        replaced with no hydration mismatch — crawlers + AI engines still get
+        real article text + schema in the initial HTML response.
 
     Static across all per-brief pages (NOT touched here):
-      og:image, og:image:width, og:image:height, og:site_name,
-      twitter:card, twitter:image, all favicon/theme tags.
+      og:image*, og:site_name, twitter:card, twitter:image, RSS/alt links,
+      site-level WebSite/Organization JSON-LD, all favicon/theme tags.
     """
+    from src import seo
+
     title = html.escape(brief["title"], quote=True)
     dek_escaped = html.escape(brief["dek"], quote=True)
     issue_no = brief["issueNo"]
@@ -491,6 +510,12 @@ def _render_per_brief_html(template_html: str, brief: dict) -> str:
         (_TW_DESC_RE,
          f'<meta name="twitter:description" content="{description}" />',
          'meta name="twitter:description"'),
+        (_CANONICAL_RE,
+         f'<link rel="canonical" href="{canonical_url}" />',
+         'link rel="canonical"'),
+        (_META_DESC_RE,
+         f'<meta name="description" content="{dek_escaped}" />',
+         'meta name="description"'),
     ]
 
     out = template_html
@@ -503,6 +528,24 @@ def _render_per_brief_html(template_html: str, brief: dict) -> str:
                 f"check agent-brief/client/index.html"
             )
         out = new_out
+
+    # Structured data + prerendered body. Function replacements (not strings):
+    # the JSON-LD payload carries \uXXXX escapes that re.sub would misread as
+    # bad escape sequences in a string replacement.
+    head_extras = seo.brief_head_extras(brief, SITE_URL)
+    out, n_head = _HEAD_CLOSE_RE.subn(lambda _m: head_extras + "</head>", out)
+    if n_head != 1:
+        raise RuntimeError(
+            f"per-brief HTML render: expected exactly one </head>; got {n_head}."
+            " Template drift — check agent-brief/client/index.html"
+        )
+    body_html = seo.prerender_brief_html(brief)
+    out, n_root = _ROOT_DIV_RE.subn(lambda _m: f'<div id="root">{body_html}</div>', out)
+    if n_root != 1:
+        raise RuntimeError(
+            'per-brief HTML render: expected exactly one empty <div id="root">;'
+            f" got {n_root}. Template drift — check agent-brief/client/index.html"
+        )
     return out
 
 
@@ -536,6 +579,37 @@ def _run_build(build_started_ts: float, briefs: list[dict]) -> None:
     template_html = DOCS_INDEX.read_text()
     _emit_per_brief_pages(briefs, template_html, DOCS_PATH)
     _emit_per_episode_pages(template_html, DOCS_PATH)
+    _emit_seo_artifacts(briefs, DOCS_PATH)
+
+
+def _emit_seo_artifacts(briefs: list[dict], docs_root: Path) -> None:
+    """Generate sitemap.xml, feed.xml, and llms.txt from the published data.
+
+    Failure-isolated: these artifacts are additive and self-heal on the next
+    build, so a generator bug must never abort a daily publish. Any exception
+    is logged and swallowed — unlike the per-page emitters, whose output gates
+    the X-card surface and so stays strict. Written after the Vite build (which
+    wipes docs/ via emptyOutDir) so they survive into the deployed tree; the
+    commit pipeline stages all of docs/.
+    """
+    from src import seo
+
+    try:
+        episodes_path = DATA_DIR / "episodes.json"
+        episodes: list[dict] = []
+        if episodes_path.exists():
+            raw = json.loads(episodes_path.read_text())
+            if isinstance(raw, list):
+                episodes = raw
+        (docs_root / "sitemap.xml").write_text(
+            seo.build_sitemap(briefs, episodes, SITE_URL)
+        )
+        (docs_root / "feed.xml").write_text(seo.build_rss(briefs, SITE_URL))
+        (docs_root / "llms.txt").write_text(
+            seo.build_llms_txt(briefs, episodes, SITE_URL)
+        )
+    except Exception as exc:  # noqa: BLE001 — additive SEO must never block publish
+        print(f"WARN: SEO artifact generation skipped: {exc}", file=sys.stderr)
 
 
 def _emit_per_episode_pages(template_html: str, docs_root: Path) -> list[str]:
