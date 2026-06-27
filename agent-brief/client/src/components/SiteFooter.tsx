@@ -74,14 +74,9 @@ export function SiteFooter() {
           />
           <span>
             Powered by{" "}
-            <a
-              href="https://oddessentials.ai"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-medium text-foreground/80 underline-offset-4 hover:text-foreground hover:underline"
-            >
-              oddessentials.ai
-            </a>
+            <span className="font-medium text-foreground/80">
+              Odd Essentials, LLC
+            </span>
           </span>
         </div>
       </div>
