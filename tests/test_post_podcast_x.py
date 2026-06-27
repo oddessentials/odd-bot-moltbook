@@ -176,7 +176,7 @@ class TestRunPostPodcastX(unittest.TestCase):
             self.assertEqual(len(tweet_calls), 1)
             self.assertEqual(
                 tweet_calls[0],
-                "joke text\nhttps://news.oddessentials.ai/podcast/ep-001",
+                "joke text\nhttps://agentbrief.net/podcast/ep-001",
             )
 
             entries = [
@@ -187,7 +187,7 @@ class TestRunPostPodcastX(unittest.TestCase):
             self.assertEqual(entries[0]["id"], "ep-001")
             self.assertEqual(entries[0]["tweet_id"], "tweet-id-1")
             self.assertEqual(
-                entries[0]["url"], "https://news.oddessentials.ai/podcast/ep-001",
+                entries[0]["url"], "https://agentbrief.net/podcast/ep-001",
             )
             self.assertIn("posted_at", entries[0])
 
@@ -273,7 +273,7 @@ class TestRunPostPodcastX(unittest.TestCase):
                 json.dumps({
                     "id": "ep-002",
                     "tweet_id": "prior-tid",
-                    "url": "https://news.oddessentials.ai/podcast/ep-002",
+                    "url": "https://agentbrief.net/podcast/ep-002",
                     "posted_at": "2026-04-28T00:00:00+00:00",
                 }) + "\n"
             )

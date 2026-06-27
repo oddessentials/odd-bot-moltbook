@@ -52,16 +52,16 @@ _TEMPLATE_HTML = """\
     <title>The Agent Brief — Daily AI Agent News</title>
     <meta property="og:title" content="The Agent Brief — Daily AI Agent News" />
     <meta property="og:description" content="A short, daily brief on AI agents." />
-    <meta property="og:image" content="https://news.oddessentials.ai/og-image.png" />
+    <meta property="og:image" content="https://agentbrief.net/og-image.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:url" content="https://news.oddessentials.ai/" />
+    <meta property="og:url" content="https://agentbrief.net/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Agent Brief Daily" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="The Agent Brief — Daily AI Agent News" />
     <meta name="twitter:description" content="A short, daily brief on AI agents." />
-    <meta name="twitter:image" content="https://news.oddessentials.ai/og-image.png" />
+    <meta name="twitter:image" content="https://agentbrief.net/og-image.png" />
   </head>
   <body><div id="root"></div></body>
 </html>
@@ -247,7 +247,7 @@ class TestRenderPerBriefHtml(unittest.TestCase):
             out)
         self.assertIn(
             '<meta property="og:url" '
-            'content="https://news.oddessentials.ai/brief/2026-04-28" />',
+            'content="https://agentbrief.net/brief/2026-04-28" />',
             out)
         self.assertIn(
             '<meta property="og:type" content="article" />', out)
@@ -305,7 +305,7 @@ class TestRenderPerBriefHtml(unittest.TestCase):
         out = _render_per_brief_html(_TEMPLATE_HTML, brief)
         self.assertIn(
             '<meta property="og:url" '
-            'content="https://news.oddessentials.ai/brief/2026-12-31" />',
+            'content="https://agentbrief.net/brief/2026-12-31" />',
             out)
 
     def test_og_type_flipped_to_article(self):
@@ -322,13 +322,13 @@ class TestRenderPerBriefHtml(unittest.TestCase):
         # are the static-across-all-pages meta the renderer must NOT touch.
         for unchanged in (
             '<meta property="og:image" '
-            'content="https://news.oddessentials.ai/og-image.png" />',
+            'content="https://agentbrief.net/og-image.png" />',
             '<meta property="og:image:width" content="1200" />',
             '<meta property="og:image:height" content="630" />',
             '<meta property="og:site_name" content="Agent Brief Daily" />',
             '<meta name="twitter:card" content="summary_large_image" />',
             '<meta name="twitter:image" '
-            'content="https://news.oddessentials.ai/og-image.png" />',
+            'content="https://agentbrief.net/og-image.png" />',
         ):
             self.assertIn(unchanged, out)
 
@@ -349,10 +349,10 @@ class TestRenderPerBriefHtml(unittest.TestCase):
     def test_duplicate_meta_raises_on_drift(self):
         # Two og:url tags also count as drift (count != 1).
         broken = _TEMPLATE_HTML.replace(
-            '<meta property="og:url" content="https://news.oddessentials.ai/" />',
-            '<meta property="og:url" content="https://news.oddessentials.ai/" />\n'
+            '<meta property="og:url" content="https://agentbrief.net/" />',
+            '<meta property="og:url" content="https://agentbrief.net/" />\n'
             '    <meta property="og:url" '
-            'content="https://news.oddessentials.ai/extra" />',
+            'content="https://agentbrief.net/extra" />',
         )
         brief = _brief("2026-04-28", issue=1)
         with self.assertRaises(RuntimeError) as cm:

@@ -23,7 +23,7 @@ Idempotency contract is identical to the daily flow:
     `skipped_catchup` rows (no replay tweets).
 
 Tweet text shape:
-  <joke>\\n<news.oddessentials.ai/podcast/<id>>
+  <joke>\\n<agentbrief.net/podcast/<id>>
 
 The joke synthesizer is a one-shot Claude call with title + description
 (EpisodeRecord fields). Same prompt skeleton as the daily flow but the
@@ -114,7 +114,7 @@ def run_post_podcast_x(
     joke_synthesizer: Callable[[dict], str],
     tweet_poster: Callable[[str], str],
     url_prober: Callable[[str], bool],
-    article_url_template: str = "https://news.oddessentials.ai/podcast/{id}",
+    article_url_template: str = "https://agentbrief.net/podcast/{id}",
     log: Callable[[str], None] = lambda _msg: None,
 ) -> int:
     """Episode-side mirror of src/post_x.run_post_x.
@@ -190,7 +190,7 @@ def run_post_podcast_x(
 # =============================================================================
 
 CLAUDE_MODEL = "claude-opus-4-7"
-X_DOMAIN = "https://news.oddessentials.ai"
+X_DOMAIN = "https://agentbrief.net"
 TOKEN_ENDPOINT = "https://api.x.com/2/oauth2/token"
 
 import re

@@ -265,7 +265,7 @@ class TestRunPostX(unittest.TestCase):
     def test_already_posted_brief_is_no_op(self):
         self._seed_sidecar([
             {"id": "2026-04-28", "tweet_id": "999",
-             "url": "https://news.oddessentials.ai/brief/2026-04-28"},
+             "url": "https://agentbrief.net/brief/2026-04-28"},
         ])
         rc = run_post_x(
             self.sidecar_path, [], [_brief("2026-04-28")],
@@ -349,7 +349,7 @@ class TestRunPostX(unittest.TestCase):
         # against the same id must respect the sidecar.
         self._seed_sidecar([
             {"id": "2026-04-28", "tweet_id": "manual-recovery",
-             "url": "https://news.oddessentials.ai/brief/2026-04-28"},
+             "url": "https://agentbrief.net/brief/2026-04-28"},
         ])
         rc = run_post_x(
             self.sidecar_path, [], [_brief("2026-04-28")],
@@ -371,7 +371,7 @@ class TestRunPostX(unittest.TestCase):
         # SHOULD complete the audit by writing the missing rows.
         self._seed_sidecar([
             {"id": "2026-04-28", "tweet_id": "abc",
-             "url": "https://news.oddessentials.ai/brief/2026-04-28"},
+             "url": "https://agentbrief.net/brief/2026-04-28"},
         ])
         after = [
             _brief("2026-04-28"),
@@ -405,7 +405,7 @@ class TestRunPostX(unittest.TestCase):
         # consumed by the sidecar dedupe.
         self._seed_sidecar([
             {"id": "2026-04-28", "tweet_id": "abc",
-             "url": "https://news.oddessentials.ai/brief/2026-04-28"},
+             "url": "https://agentbrief.net/brief/2026-04-28"},
             {"id": "2026-04-27", "status": "skipped_catchup"},
             {"id": "2026-04-26", "status": "skipped_catchup"},
         ])
