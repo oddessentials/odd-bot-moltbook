@@ -64,6 +64,14 @@ _OG_TYPE_RE = re.compile(r'<meta[^>]*\bproperty="og:type"[^>]*/?>', re.IGNORECAS
 _TW_TITLE_RE = re.compile(r'<meta[^>]*\bname="twitter:title"[^>]*/?>', re.IGNORECASE)
 _TW_DESC_RE = re.compile(r'<meta[^>]*\bname="twitter:description"[^>]*/?>', re.IGNORECASE)
 
+# SEO-enrichment anchors — parity with src/publish.py. Canonical + meta
+# description are rewritten in place; </head> and the empty #root div are
+# injection points for structured data + the prerendered body.
+_CANONICAL_RE = re.compile(r'<link[^>]*\brel="canonical"[^>]*/?>', re.IGNORECASE)
+_META_DESC_RE = re.compile(r'<meta[^>]*\bname="description"[^>]*/?>', re.IGNORECASE)
+_HEAD_CLOSE_RE = re.compile(r"</head>", re.IGNORECASE)
+_ROOT_DIV_RE = re.compile(r'<div id="root">\s*</div>', re.IGNORECASE)
+
 
 def render_episode_og_html(template_html: str, record: EpisodeRecord) -> str:
     """Rewrite the SPA template with episode-specific OG/Twitter meta.
@@ -95,6 +103,7 @@ def render_episode_og_html(template_html: str, record: EpisodeRecord) -> str:
     canonical_url = html.escape(
         f"{SITE_URL}/podcast/{record.id}", quote=True,
     )
+    meta_description = html.escape(record.description, quote=True)
 
     rewrites: list[tuple[re.Pattern[str], str, str]] = [
         (_TITLE_TAG_RE,
@@ -118,6 +127,12 @@ def render_episode_og_html(template_html: str, record: EpisodeRecord) -> str:
         (_TW_DESC_RE,
          f'<meta name="twitter:description" content="{description}" />',
          'meta name="twitter:description"'),
+        (_CANONICAL_RE,
+         f'<link rel="canonical" href="{canonical_url}" />',
+         'link rel="canonical"'),
+        (_META_DESC_RE,
+         f'<meta name="description" content="{meta_description}" />',
+         'meta name="description"'),
     ]
 
     out = template_html
@@ -130,6 +145,26 @@ def render_episode_og_html(template_html: str, record: EpisodeRecord) -> str:
                 "check agent-brief/client/index.html"
             )
         out = new_out
+
+    # PodcastEpisode JSON-LD + prerendered body. Function replacements: the
+    # JSON-LD payload carries \uXXXX escapes a string replacement would break on.
+    from src import seo
+
+    payload = record.model_dump()
+    head_extras = seo.episode_head_extras(payload, SITE_URL)
+    out, n_head = _HEAD_CLOSE_RE.subn(lambda _m: head_extras + "</head>", out)
+    if n_head != 1:
+        raise RuntimeError(
+            f"per-episode HTML render: expected exactly one </head>; got {n_head}."
+            " Template drift — check agent-brief/client/index.html"
+        )
+    body_html = seo.prerender_episode_html(payload)
+    out, n_root = _ROOT_DIV_RE.subn(lambda _m: f'<div id="root">{body_html}</div>', out)
+    if n_root != 1:
+        raise RuntimeError(
+            'per-episode HTML render: expected exactly one empty <div id="root">;'
+            f" got {n_root}. Template drift — check agent-brief/client/index.html"
+        )
     return out
 
 

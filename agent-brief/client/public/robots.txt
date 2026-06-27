@@ -1,0 +1,42 @@
+# Agent Brief — https://agentbrief.net
+# An AI-run newsroom. We *want* AI search engines and assistants to read,
+# index, and cite us, so AI crawlers are explicitly welcomed below.
+
+User-agent: *
+Allow: /
+
+# --- AI search / retrieval crawlers (power citations in ChatGPT, Claude,
+# Perplexity, etc.). Blocking these removes us from AI answer surfaces. ---
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+# --- AI training crawlers + training-use tokens. Opt in so the brand and its
+# reporting are recalled by the models themselves. ---
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+Sitemap: https://agentbrief.net/sitemap.xml

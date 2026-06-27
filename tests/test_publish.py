@@ -49,6 +49,7 @@ _TEMPLATE_HTML = """\
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="description" content="A short, daily brief on AI agents." />
     <title>The Agent Brief — Daily AI Agent News</title>
     <meta property="og:title" content="The Agent Brief — Daily AI Agent News" />
     <meta property="og:description" content="A short, daily brief on AI agents." />
@@ -56,6 +57,7 @@ _TEMPLATE_HTML = """\
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:url" content="https://agentbrief.net/" />
+    <link rel="canonical" href="https://agentbrief.net/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Agent Brief Daily" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -256,6 +258,31 @@ class TestRenderPerBriefHtml(unittest.TestCase):
         self.assertIn(
             '<meta name="twitter:description" content="Issue 118 · A subtitle." />',
             out)
+
+    def test_seo_enrichment_canonical_meta_jsonld_body(self):
+        brief = {
+            **_brief("2026-04-28", issue=118, title="Big <News>",
+                     dek="The dek & more."),
+            "tags": ["Agents", "Tooling"],
+            "items": [{"headline": "First thing", "body": "Para one.\n\nPara two."}],
+        }
+        out = _render_per_brief_html(_TEMPLATE_HTML, brief)
+        # canonical rewritten in place to the brief URL — exactly one remains
+        self.assertIn(
+            '<link rel="canonical" href="https://agentbrief.net/brief/2026-04-28" />',
+            out)
+        self.assertEqual(out.count('rel="canonical"'), 1)
+        # standard meta description = dek (search snippet)
+        self.assertIn('<meta name="description" content="The dek &amp; more." />', out)
+        # NewsArticle JSON-LD injected (XSS-safe: no raw '<' inside the script)
+        self.assertIn('"@type":"NewsArticle"', out)
+        self.assertIn('application/ld+json', out)
+        # prerendered article body inside #root for crawlers/AI engines
+        self.assertNotIn('<div id="root"></div>', out)
+        self.assertIn('<div id="root"><article>', out)
+        self.assertIn("<h1>Big &lt;News&gt;</h1>", out)
+        self.assertIn("<h2>First thing</h2>", out)
+        self.assertIn("<p>Para one.</p>", out)
 
     def test_html_escaping_title(self):
         brief = _brief("2026-04-28", issue=1,

@@ -6,10 +6,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>The Agent Brief — Daily AI Agent News</title>
-    <meta
-      name="description"
-      content="A short, daily brief on AI agents — plus a podcast hosted by a small nerdy shrimp and friends."
-    />
+    <meta name="description" content="A short, daily brief on AI agents — plus a podcast hosted by a small nerdy shrimp and friends." />
 
     <!-- Favicon + OG (assets served from /docs/ via Vite's public dir) -->
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
@@ -28,12 +25,18 @@
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:url" content="https://agentbrief.net/" />
+    <link rel="canonical" href="https://agentbrief.net/" />
+    <link rel="alternate" type="application/rss+xml" title="Agent Brief Daily" href="https://agentbrief.net/feed.xml" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Agent Brief Daily" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="The Agent Brief — Daily AI Agent News" />
     <meta name="twitter:description" content="A short, daily brief on AI agents — hosted by a small nerdy shrimp." />
     <meta name="twitter:image" content="https://agentbrief.net/og-image.png" />
+
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://agentbrief.net/#website","url":"https://agentbrief.net/","name":"Agent Brief Daily","description":"A short, daily brief on AI agents.","publisher":{"@id":"https://agentbrief.net/#org"},"inLanguage":"en"},{"@type":"Organization","@id":"https://agentbrief.net/#org","name":"Odd Essentials, LLC","url":"https://agentbrief.net/","logo":{"@type":"ImageObject","url":"https://agentbrief.net/android-chrome-512x512.png"},"sameAs":["https://x.com/oddessentials"]}]}
+    </script>
 
     <!-- Google Analytics (gtag.js) -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-SXGHJ9E9VZ"></script>

@@ -25,10 +25,12 @@ _TEMPLATE_HTML = """\
 <html lang="en">
   <head>
     <title>The Agent Brief — Daily AI Agent News</title>
+    <meta name="description" content="A short, daily brief on AI agents." />
     <meta property="og:title" content="The Agent Brief — Daily AI Agent News" />
     <meta property="og:description" content="A short, daily brief on AI agents." />
     <meta property="og:image" content="https://agentbrief.net/og-image.png" />
     <meta property="og:url" content="https://agentbrief.net/" />
+    <link rel="canonical" href="https://agentbrief.net/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Agent Brief Daily" />
     <meta name="twitter:card" content="summary_large_image" />
@@ -76,6 +78,20 @@ class TestRenderEpisodeOgHtml(unittest.TestCase):
             out,
         )
         self.assertIn('<meta property="og:type" content="article" />', out)
+
+    def test_seo_enrichment_canonical_meta_jsonld_body(self):
+        out = render_episode_og_html(_TEMPLATE_HTML, _record())
+        self.assertIn(
+            '<link rel="canonical" href="https://agentbrief.net/podcast/ep-001" />',
+            out)
+        self.assertEqual(out.count('rel="canonical"'), 1)
+        self.assertIn(
+            '<meta name="description" content="Episode description, '
+            'long enough to satisfy the schema." />', out)
+        self.assertIn('"@type":"PodcastEpisode"', out)
+        self.assertNotIn('<div id="root"></div>', out)
+        self.assertIn('<div id="root"><article>', out)
+        self.assertIn("<h1>When Agents Optimize the Scorecard (Ep. 1)</h1>", out)
 
     def test_static_brand_tags_preserved(self):
         # og:image, og:site_name, twitter:image, twitter:card MUST NOT
