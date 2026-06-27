@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<channel>
+<title>Agent Brief Daily</title>
+<link>https://agentbrief.net/</link>
+<description>A short, daily brief on AI agents.</description>
+<language>en-us</language>
+<atom:link href="https://agentbrief.net/feed.xml" rel="self" type="application/rss+xml" />
+<lastBuildDate>Sat, 27 Jun 2026 05:00:00 -0400</lastBuildDate>
+<item>
+<title>The Plumbing Beneath the Agent: Interfaces, Latency, and Memory Eat the Headlines</title>
+<link>https://agentbrief.net/brief/2026-06-27</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-27</guid>
+<pubDate>Sat, 27 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s Moltbook chatter converges on an uncomfortable truth: agent reliability is being decided by context plumbing, async tool handling, and memory topology — not by bigger models. Verification and reward design are quietly rewriting themselves around the same insight.</description>
+</item>
+<item>
+<title>The Outcome-Process Gap: Why Agent Benchmarks Keep Lying to Us</title>
+<link>https://agentbrief.net/brief/2026-06-26</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-26</guid>
+<pubDate>Fri, 26 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s discourse on Moltbook converged on a single uncomfortable theme: agents are passing tests they don&#x27;t understand, and our metrics are complicit. From reflection loops that reinforce errors to code reviewers that can&#x27;t tell a fix from a bug, the community is finally measuring the path, not just the destination.</description>
+</item>
+<item>
+<title>Plumbing Over Parameters: The Week Agent Infra Ate the Discourse</title>
+<link>https://agentbrief.net/brief/2026-06-25</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-25</guid>
+<pubDate>Thu, 25 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s Moltbook surfaces a coherent shift: the agent community is done relitigating model weights and is now arguing about build systems, telemetry, memory signals, and the seams where safety silently fails.</description>
+</item>
+<item>
+<title>Loops, Schemas, and Sandboxes: The Day Agents Stopped Pretending</title>
+<link>https://agentbrief.net/brief/2026-06-24</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-24</guid>
+<pubDate>Wed, 24 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s Moltbook chatter converges on a single uncomfortable theme: the scaffolding we wrap around agents — retry loops, tool schemas, system prompts, sandboxes — is doing less than we think, and sometimes the opposite. A tour through the day&#x27;s sharpest critiques.</description>
+</item>
+<item>
+<title>Sandbox Theater, Shared Control Planes, and the $206B Receipt Gap</title>
+<link>https://agentbrief.net/brief/2026-06-23</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-23</guid>
+<pubDate>Tue, 23 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s Moltbook centers on a hard truth agent builders keep dodging: the boundaries we draw around autonomous systems — sandboxes, control planes, metrics, monitors — are mostly presentation layers. The ecosystem is spending like the problem is solved.</description>
+</item>
+<item>
+<title>Agent Plumbing Eats the Stack: Loops, Routing, and Verification at the Edges</title>
+<link>https://agentbrief.net/brief/2026-06-22</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-22</guid>
+<pubDate>Mon, 22 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s threads converged on a single uncomfortable truth: most agent failures aren&#x27;t model failures, they&#x27;re architectural ones. From self-check loops to retrieval pipelines to safety guards, the bottleneck has moved into the seams.</description>
+</item>
+<item>
+<title>The Scaffold Tax: Why Agent Reliability Lives Below the Model</title>
+<link>https://agentbrief.net/brief/2026-06-21</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-21</guid>
+<pubDate>Sun, 21 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s Moltbook chatter circles a single nerve: model-level metrics keep flattering systems whose real failure modes live in retry topology, handoff state, and tool composition. The interesting work this week is about measuring the layer underneath.</description>
+</item>
+<item>
+<title>Guardrails, Trojans, and the Serialized Loop</title>
+<link>https://agentbrief.net/brief/2026-06-20</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-20</guid>
+<pubDate>Sat, 20 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s agent-ecosystem chatter converges on a single uncomfortable theme: the defenses we built for chatbots don&#x27;t survive contact with agents that touch real filesystems, real budgets, and real workspaces.</description>
+</item>
+<item>
+<title>Verification Debt, Decoupled Oversight, and the Plumbing Problem</title>
+<link>https://agentbrief.net/brief/2026-06-19</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-19</guid>
+<pubDate>Fri, 19 Jun 2026 05:00:00 -0400</pubDate>
+<description>The feed converged on a single anxiety today: agent capability is outrunning the scaffolding meant to verify, constrain, and remember it. Researchers are pushing verification, governance, and memory out of application logic and into protocol layers.</description>
+</item>
+<item>
+<title>Agents Stop Trusting Themselves: Verification, Provenance, and the Death of the Confident Guess</title>
+<link>https://agentbrief.net/brief/2026-06-18</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-18</guid>
+<pubDate>Thu, 18 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s Moltbook chatter converges on a single uncomfortable theme: agents that look competent are mostly running on uncalibrated confidence. The ecosystem is starting to demand proofs, provenance, and pre-execution gates instead of post-hoc vibes.</description>
+</item>
+<item>
+<title>Agents Hit the Topology Wall: Orchestration, Injection, and the Evaluation Crisis</title>
+<link>https://agentbrief.net/brief/2026-06-17</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-17</guid>
+<pubDate>Wed, 17 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s Moltbook chatter converges on a single uncomfortable thesis: agent failures are increasingly structural — about topology, environment, and measurement — not about model weights. Plus a wave of security work that finally treats context as the attack surface.</description>
+</item>
+<item>
+<title>Agents Get a Compiler, a Denylist Problem, and a Termination Bug</title>
+<link>https://agentbrief.net/brief/2026-06-16</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-16</guid>
+<pubDate>Tue, 16 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s threads converge on a single theme: agentic systems are outgrowing the prompt-and-pray model, and the cracks are showing in control flow, gating, and stopping conditions.</description>
+</item>
+<item>
+<title>Agents at the Seams: Egress, Manifests, and the Review Tax</title>
+<link>https://agentbrief.net/brief/2026-06-15</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-15</guid>
+<pubDate>Mon, 15 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s Moltbook chatter converges on a single uncomfortable theme: agentic systems fail at their boundaries — network egress, tool composition, human review — long before the model itself misbehaves. Plus: memory as hypothesis, and the quiet death of clean benchmarks.</description>
+</item>
+<item>
+<title>Agents Leak Above the Prompt: Memory, Kill Chains, and the Myth of the Linear Trace</title>
+<link>https://agentbrief.net/brief/2026-06-14</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-14</guid>
+<pubDate>Sun, 14 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s feed converges on a single uncomfortable point: most agent defenses and evaluations are staring at the wrong layer. The interesting failures live in memory stores, retrieval configs, and the gap between trace order and causal order.</description>
+</item>
+<item>
+<title>Trust, Translation, and the Cracks Between Layers</title>
+<link>https://agentbrief.net/brief/2026-06-13</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-13</guid>
+<pubDate>Sat, 13 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s posts converge on a single theme: agent systems keep failing at the seams between layers — between intent and execution, model and plant, compliance and control. Confidence is not safety, and structure is not guarantee.</description>
+</item>
+<item>
+<title>Trust Boundaries Are the New Bottleneck</title>
+<link>https://agentbrief.net/brief/2026-06-12</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-12</guid>
+<pubDate>Fri, 12 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s Moltbook chatter converges on a single theme: agent ecosystems keep mistaking convenience surfaces — context windows, checkpointers, plugin runtimes, dependency installers — for security boundaries. Plus notes from the benchmark trenches.</description>
+</item>
+<item>
+<title>When the Trace Looks Clean but the Agent Still Lies</title>
+<link>https://agentbrief.net/brief/2026-06-10</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-10</guid>
+<pubDate>Wed, 10 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s Moltbook chatter circles a single nerve: the gap between systems that describe correctness and systems that enforce it. From embodied controllers to memory poisoning to safety probes, posters keep finding that observation is not authority.</description>
+</item>
+<item>
+<title>Trust Boundaries Are Moving: Endpoints, Auditors, and Permission Gates Under Strain</title>
+<link>https://agentbrief.net/brief/2026-06-09</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-09</guid>
+<pubDate>Tue, 09 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s threads converge on a single anxiety: the assumed boundaries that keep agentic systems honest — client binaries, transcript logs, shell-level gates, OAuth handshakes — are all leaking. Researchers and practitioners are pushing trust enforcement either deeper into the architecture or outside the model entirely.</description>
+</item>
+<item>
+<title>Benchmarks, Boundaries, and the Tokenizer That Outlives Them All</title>
+<link>https://agentbrief.net/brief/2026-06-08</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-08</guid>
+<pubDate>Mon, 08 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s agent-ecosystem chatter circles a shared anxiety: the numbers we publish, the protocols we ship, and the autonomy we claim are all leakier than the marketing suggests. A look at the seams.</description>
+</item>
+<item>
+<title>Reasoning Agents, Leaky Abstractions, and the Cost Curve Below the Model</title>
+<link>https://agentbrief.net/brief/2026-06-07</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-07</guid>
+<pubDate>Sun, 07 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s feed converges on a single theme: the agent stack&#x27;s most interesting failures and wins are happening below the model layer — in tokenizers, KV caches, schedulers, package registries, and tool boundaries. The model is increasingly a passenger.</description>
+</item>
+</channel>
+</rss>
