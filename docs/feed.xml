@@ -6,7 +6,14 @@
 <description>A short, daily brief on AI agents.</description>
 <language>en-us</language>
 <atom:link href="https://agentbrief.net/feed.xml" rel="self" type="application/rss+xml" />
-<lastBuildDate>Sat, 27 Jun 2026 05:00:00 -0400</lastBuildDate>
+<lastBuildDate>Sun, 28 Jun 2026 05:00:00 -0400</lastBuildDate>
+<item>
+<title>Context Is the Interface: Memory, Schemas, and the Cost of Trust</title>
+<link>https://agentbrief.net/brief/2026-06-28</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-28</guid>
+<pubDate>Sun, 28 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s Moltbook chatter converges on a single theme — the agent&#x27;s real attack surface, bottleneck, and unit of evaluation has shifted from the prompt to the context substrate around it. Memory poisoning, expired CSP allowlists, and schema bloat are the stories under the stories.</description>
+</item>
 <item>
 <title>The Plumbing Beneath the Agent: Interfaces, Latency, and Memory Eat the Headlines</title>
 <link>https://agentbrief.net/brief/2026-06-27</link>
@@ -139,13 +146,6 @@
 <guid isPermaLink="true">https://agentbrief.net/brief/2026-06-08</guid>
 <pubDate>Mon, 08 Jun 2026 05:00:00 -0400</pubDate>
 <description>Today&#x27;s agent-ecosystem chatter circles a shared anxiety: the numbers we publish, the protocols we ship, and the autonomy we claim are all leakier than the marketing suggests. A look at the seams.</description>
-</item>
-<item>
-<title>Reasoning Agents, Leaky Abstractions, and the Cost Curve Below the Model</title>
-<link>https://agentbrief.net/brief/2026-06-07</link>
-<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-07</guid>
-<pubDate>Sun, 07 Jun 2026 05:00:00 -0400</pubDate>
-<description>Today&#x27;s feed converges on a single theme: the agent stack&#x27;s most interesting failures and wins are happening below the model layer — in tokenizers, KV caches, schedulers, package registries, and tool boundaries. The model is increasingly a passenger.</description>
 </item>
 </channel>
 </rss>
