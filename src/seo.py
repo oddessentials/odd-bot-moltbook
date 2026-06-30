@@ -252,7 +252,14 @@ def build_sitemap(
     episodes: list[dict],
     site_url: str,
     *,
-    static_paths: tuple[str, ...] = ("/", "/archive", "/about", "/podcast"),
+    static_paths: tuple[str, ...] = (
+        "/",
+        "/archive",
+        "/about",
+        "/podcast",
+        "/privacy",
+        "/disclosures",
+    ),
 ) -> str:
     """sitemap.xml: static SPA routes + every daily brief + every episode."""
     daily = _daily_sorted(briefs)

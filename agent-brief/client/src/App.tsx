@@ -8,6 +8,8 @@
  *   /archive         — Filterable list of all past briefs
  *   /podcast         — Featured episode + episode grid
  *   /about           — About the publication
+ *   /privacy         — Privacy Policy
+ *   /disclosures     — AI-content + advertising disclosures
  *   *                — NotFound (on-brand 404)
  */
 
@@ -22,6 +24,8 @@ import BriefDetail from "./pages/BriefDetail";
 import Archive from "./pages/Archive";
 import Podcast from "./pages/Podcast";
 import About from "./pages/About";
+import Privacy from "./pages/Privacy";
+import Disclosures from "./pages/Disclosures";
 import NotFound from "./pages/NotFound";
 
 function Router() {
@@ -33,6 +37,8 @@ function Router() {
       <Route path="/podcast" component={Podcast} />
       <Route path="/podcast/:id" component={Podcast} />
       <Route path="/about" component={About} />
+      <Route path="/privacy" component={Privacy} />
+      <Route path="/disclosures" component={Disclosures} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
