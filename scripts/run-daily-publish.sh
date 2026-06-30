@@ -20,6 +20,31 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# Failure notifier (Layer 1) — shared helper with the weekly podcast wrapper.
+# `bash -n` syntax-check before sourcing + a no-op fallback so a missing or
+# corrupt helper can never break the daily run (`. file || true` does NOT
+# catch a syntax error under set -e). The EXIT trap fires one #observatory
+# alert on any non-zero exit — the daily pipeline was previously silent on
+# hard failures (Anthropic billing/limit, the SPA build, the working-tree
+# guard). Deferred push failures return 0 by design, so they don't alert.
+if [ -f "$REPO_ROOT/scripts/notify_discord.sh" ] \
+   && bash -n "$REPO_ROOT/scripts/notify_discord.sh" 2>/dev/null; then
+    # shellcheck source=scripts/notify_discord.sh
+    . "$REPO_ROOT/scripts/notify_discord.sh"
+fi
+if ! command -v notify_discord >/dev/null 2>&1; then
+    notify_discord() { return 0; }
+fi
+_on_exit() {
+    local rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "  [notify] daily run failed (exit ${rc}) — alerting #observatory"
+        notify_discord "🔴 Daily brief pipeline FAILED (exit ${rc}) on $(hostname -s 2>/dev/null || echo host). See logs/moltbook-daily.log (or .launchd.err for very early failures) on the mini." || true
+    fi
+    exit "$rc"
+}
+trap _on_exit EXIT
+
 # Branch guard. The orchestrator commits + pushes on whatever branch is
 # checked out. If the operator has a feature branch checked out at
 # 05:00, the daily publish lands on that branch — main stays stale,
