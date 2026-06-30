@@ -183,6 +183,28 @@ class TestVerifyBundleContainsEpisode(unittest.TestCase):
                 episode=EP_002_FIXTURE, docs_assets_dir=assets,
             )
 
+    def test_scans_non_index_chunk_names(self):
+        # Issue #38: the manualChunks split makes Vite emit a non-`index`
+        # chunk (data-briefs-*.js), and future chunking could add more.
+        # The build-time episodes.json data can land in any chunk, so the
+        # verifier must scan all `*.js`, not just `index-*.js`. Markers
+        # here live ONLY in non-`index` chunks; the old glob would have
+        # scanned just the index chunk, missed both, and wrongly failed.
+        with tempfile.TemporaryDirectory() as td:
+            assets = Path(td) / "assets"
+            assets.mkdir()
+            (assets / "index-AAAA.js").write_text("const app = 1;")
+            (assets / "vendor-radix-BBBB.js").write_text(
+                'const e = {"id":"ep-002"};',
+            )
+            (assets / "data-briefs-CCCC.js").write_text(
+                'const v = "_nNjfWCPUPU";',
+            )
+            # Should NOT raise — markers are present, just not in index-*.js.
+            verify_bundle_contains_episode(
+                episode=EP_002_FIXTURE, docs_assets_dir=assets,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

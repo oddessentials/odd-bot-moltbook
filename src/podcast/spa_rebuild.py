@@ -15,7 +15,7 @@ deterministic local artifact check:
      defined in one place.
 
   2. `verify_bundle_contains_episode(...)` scans the rebuilt
-     `docs/assets/index-*.js` for the new episode's `id` and
+     `docs/assets/*.js` chunks for the new episode's `id` and
      `youtubeId`. Raises `RuntimeError` if either marker is missing.
 
 The composed `rebuild_spa_and_verify(...)` is the orchestrator Phase 7
@@ -64,11 +64,14 @@ def verify_bundle_contains_episode(
     """Hard gate: rebuilt SPA bundle must contain the new episode's
     `id` AND `youtubeId`. Raises `RuntimeError` if either is missing.
 
-    Scans every `index-*.js` chunk under `docs_assets_dir`. Vite
-    content-hashes the filename so we don't pre-compute the hash; we
-    grep across all chunks instead.
+    Scans every `*.js` chunk under `docs_assets_dir`. Vite content-
+    hashes the filenames, and since the manualChunks split (issue #38)
+    the build emits more than one `*.js` chunk. Rather than assume the
+    build-time episodes.json data lands in `index-*.js` specifically,
+    grep across the whole emitted JS set — robust to however Vite
+    buckets modules.
     """
-    js_files = sorted(docs_assets_dir.glob("index-*.js"))
+    js_files = sorted(docs_assets_dir.glob("*.js"))
     if not js_files:
         raise RuntimeError(
             f"no JS bundle under {docs_assets_dir} — Vite output "
