@@ -31,6 +31,7 @@ from src.editorial_time import EDITORIAL_TZ
 from src.publish import (
     _emit_per_brief_pages,
     _emit_per_episode_pages,
+    _emit_static_route_pages,
     _load_publish_record_ids,
     _reconcile_finalization,
     _render_per_brief_html,
@@ -531,6 +532,84 @@ class TestEmitPerEpisodePages(unittest.TestCase):
             with self._patch_data_dir(data_dir):
                 emitted = _emit_per_episode_pages(_TEMPLATE_HTML, docs_root)
             self.assertEqual(emitted, [])
+
+
+class TestEmitStaticRoutePages(unittest.TestCase):
+    """Static SPA routes emitted as true 200-status pages (the soft-404 fix)."""
+
+    def _patch_data_dir(self, data_dir: Path):
+        from src import publish as publish_module
+        return mock.patch.object(publish_module, "DATA_DIR", data_dir)
+
+    def test_emits_all_routes_404_and_correct_heads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpp = Path(tmp)
+            docs_root = tmpp / "docs"
+            docs_root.mkdir()
+            # Vite's `cp index.html 404.html` is upstream of this step; mirror it.
+            (docs_root / "404.html").write_text(_TEMPLATE_HTML)
+            data_dir = tmpp / "data"
+            data_dir.mkdir()
+            (data_dir / "episodes.json").write_text("[]")
+            briefs = [_brief("2026-06-27", issue=7, title="Brief seven", dek="A dek.")]
+
+            with self._patch_data_dir(data_dir):
+                emitted = _emit_static_route_pages(briefs, _TEMPLATE_HTML, docs_root)
+
+            self.assertEqual(
+                set(emitted),
+                {"/", "/archive", "/about", "/podcast", "/privacy", "/disclosures"},
+            )
+            # Real files exist → GitHub Pages serves them 200 (not the fallback).
+            self.assertTrue((docs_root / "index.html").exists())
+            for sub in ("archive", "about", "podcast", "privacy", "disclosures"):
+                self.assertTrue((docs_root / sub / "index.html").exists())
+
+            about = (docs_root / "about" / "index.html").read_text()
+            self.assertIn("<title>About — Agent Brief Daily</title>", about)
+            self.assertIn(
+                '<link rel="canonical" href="https://agentbrief.net/about" />', about
+            )
+            self.assertIn("<h1>About The Agent Brief</h1>", about)
+            self.assertNotIn('<div id="root"></div>', about)
+
+            # Home keeps the template head (homepage title/canonical), body injected.
+            home = (docs_root / "index.html").read_text()
+            self.assertIn("The Agent Brief — Daily AI Agent News", home)
+            self.assertIn('href="/brief/2026-06-27"', home)
+            self.assertNotIn('<div id="root"></div>', home)
+
+            # 404 fallback is noindex so it isn't indexed as a homepage dupe.
+            notfound = (docs_root / "404.html").read_text()
+            self.assertIn('content="noindex"', notfound)
+            self.assertIn("Page not found", notfound)
+
+    def test_drift_in_template_is_isolated_not_fatal(self):
+        # Additive pages must NOT abort the brief publish on template drift: the
+        # emitter logs a WARN and keeps going. (_emit_per_brief_pages owns the
+        # loud structural-drift abort and runs first.) The home route — which
+        # injects only a body, no head rewrite — still emits.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpp = Path(tmp)
+            docs_root = tmpp / "docs"
+            docs_root.mkdir()
+            data_dir = tmpp / "data"
+            data_dir.mkdir()
+            (data_dir / "episodes.json").write_text("[]")
+            broken = _TEMPLATE_HTML.replace(
+                '<link rel="canonical" href="https://agentbrief.net/" />', ""
+            )
+            buf = io.StringIO()
+            with self._patch_data_dir(data_dir):
+                with contextlib.redirect_stderr(buf):
+                    emitted = _emit_static_route_pages(
+                        [_brief("2026-06-27")], broken, docs_root
+                    )
+            self.assertIn("/", emitted)            # home (no head rewrite) survives
+            self.assertNotIn("/archive", emitted)  # head-rewriting route skipped
+            self.assertIn(
+                "WARN: static-route page emission skipped", buf.getvalue()
+            )
 
 
 class TestEditorialTimeGuard(unittest.TestCase):

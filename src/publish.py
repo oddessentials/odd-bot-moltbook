@@ -75,6 +75,7 @@ import os
 import re
 import subprocess
 import sys
+import urllib.request
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterator
@@ -150,6 +151,8 @@ _CANONICAL_RE = re.compile(r'<link[^>]*\brel="canonical"[^>]*/?>', re.IGNORECASE
 _META_DESC_RE = re.compile(r'<meta[^>]*\bname="description"[^>]*/?>', re.IGNORECASE)
 _HEAD_CLOSE_RE = re.compile(r"</head>", re.IGNORECASE)
 _ROOT_DIV_RE = re.compile(r'<div id="root">\s*</div>', re.IGNORECASE)
+# Rewritten to noindex in the 404.html fallback only (src._emit_404_page).
+_ROBOTS_META_RE = re.compile(r'<meta[^>]*\bname="robots"[^>]*/?>', re.IGNORECASE)
 
 
 # =============================================================================
@@ -447,6 +450,89 @@ def _try_push() -> tuple[bool, str]:
 # Build invocation
 # =============================================================================
 
+def _render_page_html(
+    template_html: str,
+    *,
+    canonical_url: str,
+    title: str = "",
+    meta_description: str = "",
+    og_title: str = "",
+    og_description: str = "",
+    og_type: str = "website",
+    head_extras: str = "",
+    body_html: str = "",
+    rewrite_head: bool = True,
+) -> str:
+    """Generic per-page render of the SPA template: in-place head rewrites +
+    head_extras injection + #root body prerender. Shared by the per-brief
+    emitter and the static-route emitter.
+
+    Pure (no I/O); template_html is not mutated. Callers pass already-escaped
+    strings. Each targeted tag must match exactly once (and </head> / the empty
+    #root div exactly once) — a non-1 count raises, surfacing SPA template drift
+    here rather than as silently broken pages on the live site. `rewrite_head`
+    is False for the homepage, whose template head is already correct (only its
+    body is injected).
+    """
+    out = template_html
+    if rewrite_head:
+        rewrites: list[tuple[re.Pattern[str], str, str]] = [
+            (_TITLE_TAG_RE, f"<title>{title}</title>", "<title>"),
+            (_OG_TITLE_RE,
+             f'<meta property="og:title" content="{og_title}" />',
+             'meta property="og:title"'),
+            (_OG_DESC_RE,
+             f'<meta property="og:description" content="{og_description}" />',
+             'meta property="og:description"'),
+            (_OG_URL_RE,
+             f'<meta property="og:url" content="{canonical_url}" />',
+             'meta property="og:url"'),
+            (_OG_TYPE_RE,
+             f'<meta property="og:type" content="{og_type}" />',
+             'meta property="og:type"'),
+            (_TW_TITLE_RE,
+             f'<meta name="twitter:title" content="{og_title}" />',
+             'meta name="twitter:title"'),
+            (_TW_DESC_RE,
+             f'<meta name="twitter:description" content="{og_description}" />',
+             'meta name="twitter:description"'),
+            (_CANONICAL_RE,
+             f'<link rel="canonical" href="{canonical_url}" />',
+             'link rel="canonical"'),
+            (_META_DESC_RE,
+             f'<meta name="description" content="{meta_description}" />',
+             'meta name="description"'),
+        ]
+        for pattern, replacement, label in rewrites:
+            new_out, count = pattern.subn(replacement, out)
+            if count != 1:
+                raise RuntimeError(
+                    f"per-page render: expected exactly one {label} tag in "
+                    f"template; got {count}. SPA template may have drifted — "
+                    f"check agent-brief/client/index.html"
+                )
+            out = new_out
+
+    # Function replacements (not strings): JSON-LD / body carry \uXXXX and other
+    # sequences that re.sub would misread as backreferences in a string repl.
+    if head_extras:
+        out, n_head = _HEAD_CLOSE_RE.subn(lambda _m: head_extras + "</head>", out)
+        if n_head != 1:
+            raise RuntimeError(
+                f"per-page render: expected exactly one </head>; got {n_head}."
+                " Template drift — check agent-brief/client/index.html"
+            )
+    out, n_root = _ROOT_DIV_RE.subn(
+        lambda _m: f'<div id="root">{body_html}</div>', out
+    )
+    if n_root != 1:
+        raise RuntimeError(
+            'per-page render: expected exactly one empty <div id="root">;'
+            f" got {n_root}. Template drift — check agent-brief/client/index.html"
+        )
+    return out
+
+
 def _render_per_brief_html(template_html: str, brief: dict) -> str:
     """Rewrite the SPA index.html template with brief-specific OG/Twitter meta.
 
@@ -488,65 +574,17 @@ def _render_per_brief_html(template_html: str, brief: dict) -> str:
     description = f"Issue {issue_no} · {dek_escaped}"
     canonical_url = f"{SITE_URL}/brief/{brief['id']}"
 
-    rewrites: list[tuple[re.Pattern[str], str, str]] = [
-        (_TITLE_TAG_RE,
-         f"<title>{title} — Agent Brief Daily</title>",
-         "<title>"),
-        (_OG_TITLE_RE,
-         f'<meta property="og:title" content="{title}" />',
-         'meta property="og:title"'),
-        (_OG_DESC_RE,
-         f'<meta property="og:description" content="{description}" />',
-         'meta property="og:description"'),
-        (_OG_URL_RE,
-         f'<meta property="og:url" content="{canonical_url}" />',
-         'meta property="og:url"'),
-        (_OG_TYPE_RE,
-         '<meta property="og:type" content="article" />',
-         'meta property="og:type"'),
-        (_TW_TITLE_RE,
-         f'<meta name="twitter:title" content="{title}" />',
-         'meta name="twitter:title"'),
-        (_TW_DESC_RE,
-         f'<meta name="twitter:description" content="{description}" />',
-         'meta name="twitter:description"'),
-        (_CANONICAL_RE,
-         f'<link rel="canonical" href="{canonical_url}" />',
-         'link rel="canonical"'),
-        (_META_DESC_RE,
-         f'<meta name="description" content="{dek_escaped}" />',
-         'meta name="description"'),
-    ]
-
-    out = template_html
-    for pattern, replacement, label in rewrites:
-        new_out, count = pattern.subn(replacement, out)
-        if count != 1:
-            raise RuntimeError(
-                f"per-brief HTML render: expected exactly one {label} tag "
-                f"in template; got {count}. SPA template may have drifted — "
-                f"check agent-brief/client/index.html"
-            )
-        out = new_out
-
-    # Structured data + prerendered body. Function replacements (not strings):
-    # the JSON-LD payload carries \uXXXX escapes that re.sub would misread as
-    # bad escape sequences in a string replacement.
-    head_extras = seo.brief_head_extras(brief, SITE_URL)
-    out, n_head = _HEAD_CLOSE_RE.subn(lambda _m: head_extras + "</head>", out)
-    if n_head != 1:
-        raise RuntimeError(
-            f"per-brief HTML render: expected exactly one </head>; got {n_head}."
-            " Template drift — check agent-brief/client/index.html"
-        )
-    body_html = seo.prerender_brief_html(brief)
-    out, n_root = _ROOT_DIV_RE.subn(lambda _m: f'<div id="root">{body_html}</div>', out)
-    if n_root != 1:
-        raise RuntimeError(
-            'per-brief HTML render: expected exactly one empty <div id="root">;'
-            f" got {n_root}. Template drift — check agent-brief/client/index.html"
-        )
-    return out
+    return _render_page_html(
+        template_html,
+        canonical_url=canonical_url,
+        title=f"{title} — Agent Brief Daily",
+        meta_description=dek_escaped,
+        og_title=title,
+        og_description=description,
+        og_type="article",
+        head_extras=seo.brief_head_extras(brief, SITE_URL),
+        body_html=seo.prerender_brief_html(brief),
+    )
 
 
 def _run_build(build_started_ts: float, briefs: list[dict]) -> None:
@@ -579,7 +617,21 @@ def _run_build(build_started_ts: float, briefs: list[dict]) -> None:
     template_html = DOCS_INDEX.read_text()
     _emit_per_brief_pages(briefs, template_html, DOCS_PATH)
     _emit_per_episode_pages(template_html, DOCS_PATH)
+    _emit_static_route_pages(briefs, template_html, DOCS_PATH)
     _emit_seo_artifacts(briefs, DOCS_PATH)
+
+
+def _load_episodes_for_build() -> list[dict]:
+    """Best-effort load of data/episodes.json as a list (empty on any problem).
+    Shared by the SEO-artifact and static-route emitters."""
+    episodes_path = DATA_DIR / "episodes.json"
+    if not episodes_path.exists():
+        return []
+    try:
+        raw = json.loads(episodes_path.read_text())
+    except json.JSONDecodeError:
+        return []
+    return raw if isinstance(raw, list) else []
 
 
 def _emit_seo_artifacts(briefs: list[dict], docs_root: Path) -> None:
@@ -595,12 +647,7 @@ def _emit_seo_artifacts(briefs: list[dict], docs_root: Path) -> None:
     from src import seo
 
     try:
-        episodes_path = DATA_DIR / "episodes.json"
-        episodes: list[dict] = []
-        if episodes_path.exists():
-            raw = json.loads(episodes_path.read_text())
-            if isinstance(raw, list):
-                episodes = raw
+        episodes = _load_episodes_for_build()
         (docs_root / "sitemap.xml").write_text(
             seo.build_sitemap(briefs, episodes, SITE_URL)
         )
@@ -610,6 +657,112 @@ def _emit_seo_artifacts(briefs: list[dict], docs_root: Path) -> None:
         )
     except Exception as exc:  # noqa: BLE001 — additive SEO must never block publish
         print(f"WARN: SEO artifact generation skipped: {exc}", file=sys.stderr)
+
+
+def _emit_static_route_pages(
+    briefs: list[dict], template_html: str, docs_root: Path,
+) -> list[str]:
+    """Emit a true 200-status index.html for every static SPA route.
+
+    Without these files GitHub Pages serves /about, /archive, /podcast, etc. via
+    the 404.html SPA fallback at an HTTP 404 status — a soft 404 that search and
+    AI crawlers skip, and since none of the major AI crawlers execute JS they'd
+    see nothing in the shell anyway. Each page gets a correct
+    <title>/canonical/meta + a prerendered body, driven off seo.STATIC_ROUTES
+    (shared with the sitemap, so the two can't drift).
+
+    The "/" route overwrites docs/index.html with the homepage body injected;
+    its head is already correct from the build, so only the body is rewritten.
+
+    Failure-isolated: these pages are additive, so a bug here must never abort
+    the brief publish (unlike _emit_per_brief_pages, whose strict drift-check
+    runs first and already catches structural template drift loudly). On error
+    we log, keep whatever was written, and self-heal on the next build. The
+    homepage body is written last per route, so a mid-loop failure leaves
+    index.html either fully rewritten or untouched (the clean Vite shell) —
+    never half-built.
+    """
+    from src import seo
+
+    emitted: list[str] = []
+    try:
+        episodes = _load_episodes_for_build()
+        for route in seo.STATIC_ROUTES:
+            body_html = seo.prerender_route_body(route.path, briefs, episodes)
+            canonical_url = f"{SITE_URL}{route.path}"
+            rendered = _render_page_html(
+                template_html,
+                canonical_url=canonical_url,
+                title=html.escape(route.title, quote=True),
+                meta_description=html.escape(route.description, quote=True),
+                og_title=html.escape(route.og_title, quote=True),
+                og_description=html.escape(route.description, quote=True),
+                og_type="website",
+                body_html=body_html,
+                rewrite_head=(route.path != "/"),
+            )
+            if route.path == "/":
+                out_path = docs_root / "index.html"
+            else:
+                out_path = docs_root / route.path.strip("/") / "index.html"
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_text(rendered)
+            emitted.append(route.path)
+
+        _emit_404_page(template_html, docs_root)
+    except Exception as exc:  # noqa: BLE001 — additive pages must never block publish
+        print(
+            f"WARN: static-route page emission skipped: {exc}", file=sys.stderr
+        )
+    return emitted
+
+
+def _emit_404_page(template_html: str, docs_root: Path) -> None:
+    """Rewrite docs/404.html (the GitHub Pages SPA fallback) into a noindex
+    Not-Found shell. Unmatched deep links are still served from here with an
+    HTTP 404 status; the SPA boots and renders the on-brand NotFound route
+    client-side. The noindex stops the 404-status body being indexed as a
+    homepage duplicate."""
+    out, n = _ROBOTS_META_RE.subn(
+        '<meta name="robots" content="noindex" />', template_html, count=1
+    )
+    if n == 0:  # template has no robots meta — inject one before </head>
+        out, _ = _HEAD_CLOSE_RE.subn(
+            lambda _m: '<meta name="robots" content="noindex" /></head>',
+            template_html,
+            count=1,
+        )
+    out = _TITLE_TAG_RE.sub(
+        "<title>Page not found — Agent Brief Daily</title>", out, count=1
+    )
+    (docs_root / "404.html").write_text(out)
+
+
+def _submit_indexnow(urls: list[str]) -> None:
+    """Notify IndexNow (Bing / Yandex / Naver / Seznam) of changed URLs.
+
+    Best-effort and fully failure-isolated: never raises, never blocks a publish.
+    Called only after the commit+push has already succeeded, so the content is
+    durable on origin; Google (which ignores IndexNow) still finds the same URLs
+    via the sitemap and normal crawling.
+    """
+    if not urls:
+        return
+    try:
+        from src import seo
+
+        payload = seo.build_indexnow_payload(urls, SITE_URL)
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            seo.INDEXNOW_ENDPOINT,
+            data=data,
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            print(f"IndexNow: submitted {len(urls)} url(s); HTTP {resp.status}")
+    except Exception as exc:  # noqa: BLE001 — outward call must never block publish
+        print(f"WARN: IndexNow submission skipped: {exc}", file=sys.stderr)
 
 
 def _emit_per_episode_pages(template_html: str, docs_root: Path) -> list[str]:
@@ -1057,6 +1210,13 @@ def run_daily_publish(
 
     if ok:
         print(f"commit ok ({commit_sha[:7]}); push ok; published {published_this_run}")
+        # Outward-facing, post-push, failure-isolated: nudge Bing/Yandex to
+        # recrawl the URLs this run changed (the new brief(s) + the hubs that
+        # list them). Never blocks the publish (the commit+push already landed).
+        _submit_indexnow(
+            [f"{SITE_URL}/", f"{SITE_URL}/archive"]
+            + [f"{SITE_URL}/brief/{bid}" for bid in published_this_run]
+        )
     else:
         print(
             f"commit ok ({commit_sha[:7]}); push deferred ({push_status}); "

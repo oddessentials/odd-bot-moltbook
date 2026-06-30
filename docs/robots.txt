@@ -5,6 +5,19 @@
 User-agent: *
 Allow: /
 
+# --- General + AI-adjacent search indexes. Googlebot feeds Google Search AND
+# AI Overviews / Gemini grounding (no separate opt-in); Bingbot's index feeds
+# Microsoft Copilot and historically ChatGPT's candidate URLs; Applebot feeds
+# Siri/Spotlight. Explicit even though `*` already allows them. ---
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
 # --- AI search / retrieval crawlers (power citations in ChatGPT, Claude,
 # Perplexity, etc.). Blocking these removes us from AI answer surfaces. ---
 User-agent: OAI-SearchBot
@@ -25,6 +38,9 @@ Allow: /
 User-agent: Perplexity-User
 Allow: /
 
+User-agent: Amazonbot
+Allow: /
+
 # --- AI training crawlers + training-use tokens. Opt in so the brand and its
 # reporting are recalled by the models themselves. ---
 User-agent: GPTBot
@@ -37,6 +53,9 @@ User-agent: Google-Extended
 Allow: /
 
 User-agent: Applebot-Extended
+Allow: /
+
+User-agent: CCBot
 Allow: /
 
 Sitemap: https://agentbrief.net/sitemap.xml
