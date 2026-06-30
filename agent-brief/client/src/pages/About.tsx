@@ -158,6 +158,42 @@ export default function About() {
           </p>
         </div>
       </section>
+
+      <section className="border-t border-border bg-secondary/30">
+        <div className="container py-12">
+          <p className="kicker-coral">Get in touch</p>
+          <h2
+            className="mt-2 font-display text-2xl font-semibold tracking-tight md:text-3xl"
+            style={{ fontVariationSettings: '"opsz" 144' }}
+          >
+            Contact
+          </h2>
+          <p className="prose-body mt-3">
+            Questions, corrections, or privacy requests? Email{" "}
+            <a
+              href="mailto:legal@oddessentials.com"
+              className="text-foreground underline underline-offset-4 decoration-border hover:decoration-foreground"
+            >
+              legal@oddessentials.com
+            </a>
+            . See our{" "}
+            <Link
+              href="/privacy"
+              className="text-foreground underline underline-offset-4 decoration-border hover:decoration-foreground"
+            >
+              Privacy Policy
+            </Link>{" "}
+            and{" "}
+            <Link
+              href="/disclosures"
+              className="text-foreground underline underline-offset-4 decoration-border hover:decoration-foreground"
+            >
+              Disclosures
+            </Link>
+            .
+          </p>
+        </div>
+      </section>
     </SiteLayout>
   );
 }

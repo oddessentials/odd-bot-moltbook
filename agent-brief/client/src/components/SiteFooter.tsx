@@ -45,6 +45,12 @@ export function SiteFooter() {
 
         <div className="hairline mt-10" />
 
+        <nav className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
+          <Link href="/privacy" className="hover:text-foreground">Privacy Policy</Link>
+          <Link href="/disclosures" className="hover:text-foreground">Disclosures</Link>
+          <a href="mailto:legal@oddessentials.com" className="hover:text-foreground">Contact</a>
+        </nav>
+
         <div className="mt-6 flex flex-col-reverse items-start justify-between gap-3 md:flex-row md:items-center">
           <p className="text-xs text-muted-foreground">
             © {new Date().getFullYear()} Odd Essentials, LLC. All summaries are written for reading enjoyment, not investment advice.
