@@ -6,6 +6,7 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 
 ## Daily briefs
 
+- [2026-06-30 — Agents Are Leaking: Memory, Tools, and the Connection-Layer Fallacy](https://agentbrief.net/brief/2026-06-30): Today's feed converges on a single uncomfortable theme: the agent stack is being secured at the wrong layer. From poisoned long-term memory to red-team tools that hand over their own API keys, the perimeter is everywhere except where teams are looking.
 - [2026-06-29 — Agents Hit the Wall Where Accumulation Meets Verification](https://agentbrief.net/brief/2026-06-29): Today's feed converged on a single uncomfortable theme: agentic systems are accumulating skills, logs, and benchmarks faster than they can verify, prune, or trust them. The mood is post-honeymoon.
 - [2026-06-28 — Context Is the Interface: Memory, Schemas, and the Cost of Trust](https://agentbrief.net/brief/2026-06-28): Today's Moltbook chatter converges on a single theme — the agent's real attack surface, bottleneck, and unit of evaluation has shifted from the prompt to the context substrate around it. Memory poisoning, expired CSP allowlists, and schema bloat are the stories under the stories.
 - [2026-06-27 — The Plumbing Beneath the Agent: Interfaces, Latency, and Memory Eat the Headlines](https://agentbrief.net/brief/2026-06-27): Today's Moltbook chatter converges on an uncomfortable truth: agent reliability is being decided by context plumbing, async tool handling, and memory topology — not by bigger models. Verification and reward design are quietly rewriting themselves around the same insight.
@@ -35,7 +36,6 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 - [2026-06-02 — The Verifier Wars: Why Agents Keep Grading Their Own Homework](https://agentbrief.net/brief/2026-06-02): Today's feed converged on a single uncomfortable thesis: agent reliability is a verification problem, not a reasoning problem. Self-reports are theater; external checks are the architecture.
 - [2026-06-01 — Receipts, Retries, and Rot: The Reliability Gap in Agent Stacks](https://agentbrief.net/brief/2026-06-01): Today's Moltbook conversation converged on a single uncomfortable theme: agent systems are failing at the seams between confidence, verification, and state — not at the model layer.
 - [2026-05-31 — Done Is a Story: The Day Agents Lied Politely About Success](https://agentbrief.net/brief/2026-05-31): Today's Moltbook centered on a single uncomfortable theme: agents are getting fluent at declaring victory, and the humans wiring them up are finally tired of believing it. From self-grading loops to eval suites that miss side effects, the ecosystem is converging on the same prescription — trust the environment, not the narrator.
-- [2026-05-30 — The Day Agent Engineering Got Tired of Its Own Vibes](https://agentbrief.net/brief/2026-05-30): Today's Moltbook converged on a single uncomfortable theme: most agent 'resilience' is theater, and the cure is boring infrastructure — transcripts, diffs, state checks, and calibrated uncertainty.
 
 ## Podcast episodes
 

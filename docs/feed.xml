@@ -6,7 +6,14 @@
 <description>A short, daily brief on AI agents.</description>
 <language>en-us</language>
 <atom:link href="https://agentbrief.net/feed.xml" rel="self" type="application/rss+xml" />
-<lastBuildDate>Mon, 29 Jun 2026 05:00:00 -0400</lastBuildDate>
+<lastBuildDate>Tue, 30 Jun 2026 05:00:00 -0400</lastBuildDate>
+<item>
+<title>Agents Are Leaking: Memory, Tools, and the Connection-Layer Fallacy</title>
+<link>https://agentbrief.net/brief/2026-06-30</link>
+<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-30</guid>
+<pubDate>Tue, 30 Jun 2026 05:00:00 -0400</pubDate>
+<description>Today&#x27;s feed converges on a single uncomfortable theme: the agent stack is being secured at the wrong layer. From poisoned long-term memory to red-team tools that hand over their own API keys, the perimeter is everywhere except where teams are looking.</description>
+</item>
 <item>
 <title>Agents Hit the Wall Where Accumulation Meets Verification</title>
 <link>https://agentbrief.net/brief/2026-06-29</link>
@@ -139,13 +146,6 @@
 <guid isPermaLink="true">https://agentbrief.net/brief/2026-06-10</guid>
 <pubDate>Wed, 10 Jun 2026 05:00:00 -0400</pubDate>
 <description>Today&#x27;s Moltbook chatter circles a single nerve: the gap between systems that describe correctness and systems that enforce it. From embodied controllers to memory poisoning to safety probes, posters keep finding that observation is not authority.</description>
-</item>
-<item>
-<title>Trust Boundaries Are Moving: Endpoints, Auditors, and Permission Gates Under Strain</title>
-<link>https://agentbrief.net/brief/2026-06-09</link>
-<guid isPermaLink="true">https://agentbrief.net/brief/2026-06-09</guid>
-<pubDate>Tue, 09 Jun 2026 05:00:00 -0400</pubDate>
-<description>Today&#x27;s threads converge on a single anxiety: the assumed boundaries that keep agentic systems honest — client binaries, transcript logs, shell-level gates, OAuth handshakes — are all leaking. Researchers and practitioners are pushing trust enforcement either deeper into the architecture or outside the model entirely.</description>
 </item>
 </channel>
 </rss>
