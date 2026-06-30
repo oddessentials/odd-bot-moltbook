@@ -24,10 +24,12 @@
 #      auth flows are strict-cert-validated and mitmproxy's TLS
 #      substitution would 401 them.
 #
-# DRY_RUN=1 invocation runs all guards + env setup + computes the next
-# episode id, then exits without invoking the orchestrator. Used to
+# DRY_RUN=1 invocation runs the cheap guards + env setup + computes the
+# next episode id, then exits without invoking the orchestrator. Used to
 # verify wiring under launchd without spending Anthropic / ElevenLabs
-# / Hedra credits.
+# / Hedra credits. (The Hedra credit pre-flight is skipped under DRY_RUN
+# — it makes a live billing call and can post a skip alert, neither of
+# which belongs in a wiring check.)
 #
 # Auth/keys: never set in env. Python loads keys lazily from
 # ~/.openclaw/keys/ + repo-local .keys inside the orchestrator. The
@@ -49,6 +51,23 @@ MIN_DAYS=13
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# Failure/skip notifier (defines notify_discord; posts to #observatory via
+# the shared webhook). Sourced early so the EXIT trap below can use it.
+# `bash -n` syntax-check before sourcing + a no-op fallback: a missing OR
+# corrupt helper must never break the wrapper or turn a clean skip into a
+# "command not found" failure. NB: `. file || true` does NOT catch a syntax
+# error in the sourced file — under set -e the shell still aborts (verified
+# on bash 3.2), killing the wrapper before the EXIT trap is even installed.
+# The bash -n precheck is what actually prevents that.
+if [ -f "$REPO_ROOT/scripts/notify_discord.sh" ] \
+   && bash -n "$REPO_ROOT/scripts/notify_discord.sh" 2>/dev/null; then
+    # shellcheck source=scripts/notify_discord.sh
+    . "$REPO_ROOT/scripts/notify_discord.sh"
+fi
+if ! command -v notify_discord >/dev/null 2>&1; then
+    notify_discord() { return 0; }
+fi
+
 # launchd's default PATH is /usr/bin:/bin:/usr/sbin:/sbin and excludes
 # Homebrew (/opt/homebrew/bin on Apple Silicon, /usr/local/bin on Intel).
 # The orchestrator's media stage shells out to ffmpeg + ffprobe via
@@ -60,6 +79,22 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 LOG_DIR="$REPO_ROOT/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/podcast-weekly.log"
+
+# Failure alert. Every *intentional* exit in this wrapper is exit 0
+# (branch guard, Phase-3 guard, reconcile push/halt, cadence/balance
+# refuse, dry-run, success), so a non-zero exit is always a real failure
+# — the 2026-06-28 Hedra 402 died here with no signal. Fire one
+# #observatory alert on any non-zero exit. Best-effort: the alert never
+# alters the exit status (see scripts/notify_discord.sh).
+_on_exit() {
+    local rc=$?
+    if [ "$rc" -ne 0 ]; then
+        echo "  [notify] run failed (exit ${rc}) — alerting #observatory"
+        notify_discord "🔴 Podcast pipeline FAILED (exit ${rc}) on $(hostname -s 2>/dev/null || echo host), episode ${NEXT_ID:-unknown}. See logs/podcast-weekly.log (or .launchd.err for very early failures) on the mini." || true
+    fi
+    exit "$rc"
+}
+trap _on_exit EXIT
 
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "DETACHED")"
 if [ "$CURRENT_BRANCH" != "main" ]; then
@@ -215,6 +250,64 @@ else
             exit 1
             ;;
     esac
+fi
+
+# ── Spend pre-flight (Layer 2) ──────────────────────────────────────────────
+# Refuse a run that can't afford to finish, BEFORE any Anthropic / ElevenLabs
+# / Hedra spend. Covers the two metered services that expose a balance
+# endpoint; both the 2026-06-28 and 2026-05-17 (ep-003) runs died with
+# partial Hedra credit mid-render, wasting all prior script-gen + TTS + clips.
+# Anthropic and YouTube have no pre-flight balance endpoint — they are covered
+# by the EXIT-trap failure alert (Layer 1).
+#
+# Per-service ADVISORY + FAIL-OPEN: a guard-side error (network/parse/
+# unexpected) proceeds with a warning — a balance-check hiccup must never
+# block a legitimate run; the orchestrator's own error plus the EXIT-trap
+# alert are the backstop. FORCE=1 / DRY_RUN=1 skip the whole pre-flight.
+# Floors are env-tunable:
+#   HEDRA_MIN_CREDITS    default 1800 ≈ one 720p episode (~1,500 credits per
+#                        plans/podcast-pipeline.md:214) + ~20% margin.
+#   ELEVENLABS_MIN_CHARS default 5000 ≈ ~1.5 episodes of narration.
+HEDRA_MIN_CREDITS="${HEDRA_MIN_CREDITS:-1800}"
+ELEVENLABS_MIN_CHARS="${ELEVENLABS_MIN_CHARS:-5000}"
+
+# run_spend_guard <module> <floor> <human-label> <units>
+# Runs a standalone balance guard whose stdout contract is one of:
+#   PROCEED:<unit>:<remaining>:<min> | REFUSE:<unit>:<remaining>:<min>
+#   | PROCEED:error:<Name>
+# REFUSE → clean exit 0 + an #observatory skip notice (no spend, no publish).
+# PROCEED:error / unexpected → fail-open (log + proceed).
+run_spend_guard() {
+    local module="$1" floor="$2" label="$3" units="$4"
+    local result remaining
+    result=$("$REPO_ROOT/.venv/bin/python" -m "$module" --min "$floor") || true
+    case "$result" in
+        REFUSE:*)
+            remaining=$(printf '%s' "$result" | cut -d: -f3 || true)
+            echo "  spend pre-flight [$label]: $result — insufficient; no spend, no publish."
+            notify_discord "⚠️ Podcast skipped on $(hostname -s 2>/dev/null || echo host): ${label} low (${remaining} ${units} < floor ${floor}). Fund to resume; no episode this run." || true
+            echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh finished (spend pre-flight: $label)"
+            exit 0
+            ;;
+        PROCEED:error:*)
+            echo "  spend pre-flight [$label]: $result — fail-open, proceeding."
+            ;;
+        PROCEED:*)
+            echo "  spend pre-flight [$label]: $result"
+            ;;
+        *)
+            echo "  spend pre-flight [$label]: unexpected ($result) — fail-open, proceeding."
+            ;;
+    esac
+}
+
+if [ "${DRY_RUN:-}" = "1" ]; then
+    echo "  spend pre-flight: DRY_RUN=1 — skipped (no balance calls, no alerts)."
+elif [ "${FORCE:-}" = "1" ]; then
+    echo "  spend pre-flight: FORCE=1 — bypassed (operator override)."
+else
+    run_spend_guard src.podcast_hedra_balance_guard "$HEDRA_MIN_CREDITS" "Hedra" credits
+    run_spend_guard src.podcast_elevenlabs_balance_guard "$ELEVENLABS_MIN_CHARS" "ElevenLabs" characters
 fi
 
 NEXT_NO=$("$REPO_ROOT/.venv/bin/python" -c \
