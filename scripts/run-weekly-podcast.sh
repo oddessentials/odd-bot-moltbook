@@ -68,6 +68,24 @@ if ! command -v notify_discord >/dev/null 2>&1; then
     notify_discord() { return 0; }
 fi
 
+# Kuma missed-heartbeat push (best-effort). GETs the push URL stored at
+# ~/.openclaw/keys/moltbook-kuma-weekly-push so the observatory
+# 'moltbook-weekly' push monitor registers a live beat. Missed-heartbeat
+# detection ONLY: a missing file, dead Kuma, timeout, or any HTTP error is a
+# silent no-op — it must NEVER alter the wrapper's exit status (the EXIT trap
+# invokes it only on an already-healthy exit). --noproxy '*' bypasses the
+# observatory mitmproxy (127.0.0.1 is not in NO_PROXY), mirroring
+# notify_discord.sh. Targets bash 3.2.
+kuma_heartbeat_weekly() {
+    local url_file="${HOME:-}/.openclaw/keys/moltbook-kuma-weekly-push"
+    [ -f "$url_file" ] || return 0
+    local url
+    url="$(cat "$url_file" 2>/dev/null | tr -d '[:space:]' || true)"
+    [ -n "$url" ] || return 0
+    curl --noproxy '*' --max-time 5 --connect-timeout 3 -fsS "$url" >/dev/null 2>&1 || true
+    return 0
+}
+
 # launchd's default PATH is /usr/bin:/bin:/usr/sbin:/sbin and excludes
 # Homebrew (/opt/homebrew/bin on Apple Silicon, /usr/local/bin on Intel).
 # The orchestrator's media stage shells out to ffmpeg + ffprobe via
@@ -80,17 +98,25 @@ LOG_DIR="$REPO_ROOT/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/podcast-weekly.log"
 
-# Failure alert. Every *intentional* exit in this wrapper is exit 0
-# (branch guard, Phase-3 guard, reconcile push/halt, cadence/balance
-# refuse, dry-run, success), so a non-zero exit is always a real failure
-# — the 2026-06-28 Hedra 402 died here with no signal. Fire one
-# #observatory alert on any non-zero exit. Best-effort: the alert never
-# alters the exit status (see scripts/notify_discord.sh).
+# Failure alert + missed-heartbeat. Every *intentional* exit in this wrapper
+# is exit 0 (branch guard, Phase-3 guard, reconcile push/halt, cadence/balance
+# refuse, dry-run, success), so a non-zero exit is always a real failure — the
+# 2026-06-28 Hedra 402 died here with no signal. Fire one #observatory alert on
+# any non-zero exit. On a HEALTHY exit (the HEALTHY=1 assignments below mark the
+# exits where the job ran and reached a safe conclusion), send the Kuma
+# heartbeat instead, so the 'moltbook-weekly' push monitor only trips when the
+# job stops reaching a healthy exit (machine dark / job never ran). Both are
+# best-effort and never alter the exit status. This is the wrapper's SINGLE EXIT
+# trap — bash keeps only the last trap, so the heartbeat lives here, merged in;
+# do NOT add a second `trap ... EXIT`.
+HEALTHY=0
 _on_exit() {
     local rc=$?
     if [ "$rc" -ne 0 ]; then
         echo "  [notify] run failed (exit ${rc}) — alerting #observatory"
         notify_discord "🔴 Podcast pipeline FAILED (exit ${rc}) on $(hostname -s 2>/dev/null || echo host), episode ${NEXT_ID:-unknown}. See logs/podcast-weekly.log (or .launchd.err for very early failures) on the mini." || true
+    elif [ "$HEALTHY" = "1" ]; then
+        kuma_heartbeat_weekly
     fi
     exit "$rc"
 }
@@ -203,6 +229,7 @@ case "$RECON_STATUS" in
         echo "  this run's job was reconciliation only; new content generation"
         echo "  resumes on the next scheduled Sunday fire (or a manual rerun)."
         echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh finished (pre-flight reconciled prior work; no generation)"
+        HEALTHY=1  # ran + reconciled prior bot work to a clean push — a healthy beat
         exit 0
         ;;
     STATUS:halt:*)
@@ -242,6 +269,7 @@ else
             echo "  no spend, no publish. Next eligible fire is the next Sunday 09:00"
             echo "  America/New_York at-or-after MIN_DAYS=$MIN_DAYS days from the latest publish."
             echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh finished (cadence guard)"
+            HEALTHY=1  # ran + cleanly declined an interim Sunday — a healthy beat
             exit 0
             ;;
         *)
@@ -287,6 +315,7 @@ run_spend_guard() {
             echo "  spend pre-flight [$label]: $result — insufficient; no spend, no publish."
             notify_discord "⚠️ Podcast skipped on $(hostname -s 2>/dev/null || echo host): ${label} low (${remaining} ${units} < floor ${floor}). Fund to resume; no episode this run." || true
             echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh finished (spend pre-flight: $label)"
+            HEALTHY=1  # ran + safely refused low balance (already alerted) — a healthy beat, not "dark"
             exit 0
             ;;
         PROCEED:error:*)
@@ -357,4 +386,5 @@ else
     fi
 fi
 
+HEALTHY=1  # reached successful completion (published + pushed, or idempotent no-op) — a healthy beat
 echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) run-weekly-podcast.sh finished"

@@ -393,6 +393,36 @@ def _write_run_state(state: dict) -> None:
     _atomic_write_text(RUN_STATE_PATH, json.dumps(state, indent=2) + "\n")
 
 
+def _kuma_daily_heartbeat() -> None:
+    """Best-effort Kuma push heartbeat for the daily pipeline.
+
+    GETs the push URL stored at ``~/.openclaw/keys/moltbook-kuma-daily-push``
+    so the observatory ``moltbook-daily`` push monitor registers a live beat.
+    Missed-heartbeat detection ONLY — a missing key file, dead Kuma, timeout,
+    or any HTTP error is a silent no-op. This MUST NEVER raise or change the
+    publish outcome: a monitoring failure that breaks publishing inverts the
+    value of monitoring. Called only after a ``phase: complete`` run-state
+    write, so dry-run (returns earlier) and pre-flight-halt (writes a
+    different phase) never beat.
+
+    Forces a direct connection (empty ProxyHandler) because the daily wrapper
+    exports HTTPS_PROXY/HTTP_PROXY for the observatory mitmproxy and does not
+    list 127.0.0.1 in NO_PROXY — the loopback heartbeat must not transit the
+    proxy. Mirrors notify_discord.sh's ``curl --noproxy '*'``.
+    """
+    try:
+        url = (
+            Path.home() / ".openclaw" / "keys" / "moltbook-kuma-daily-push"
+        ).read_text().strip()
+        if not url:
+            return
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with contextlib.closing(opener.open(url, timeout=5)):
+            pass
+    except Exception:
+        pass
+
+
 # =============================================================================
 # Git operations
 # =============================================================================
@@ -1025,6 +1055,7 @@ def run_daily_publish(
             "push": "ok",
             "published": [],
         })
+        _kuma_daily_heartbeat()
         return 0
 
     print(f"candidates ({len(candidates)}): {[d.isoformat() for d in candidates]}")
@@ -1114,6 +1145,7 @@ def run_daily_publish(
             "published": [],
             "live_fetch_invocations": live_fetch_invocations,
         })
+        _kuma_daily_heartbeat()
         return 0
 
     # Write briefs.json so Vite picks it up at build time. From here through
@@ -1207,6 +1239,7 @@ def run_daily_publish(
         "published": published_this_run,
         "live_fetch_invocations": live_fetch_invocations,
     })
+    _kuma_daily_heartbeat()
 
     if ok:
         print(f"commit ok ({commit_sha[:7]}); push ok; published {published_this_run}")
