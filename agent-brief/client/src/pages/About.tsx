@@ -153,9 +153,6 @@ export default function About() {
             until we accidentally make it useful.
           </p>
           <p>Happy AI-ing.</p>
-          <p className="italic">
-            A special thanks to Busto for always believing we can overcome the impossible.
-          </p>
         </div>
       </section>
 
