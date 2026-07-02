@@ -6,6 +6,7 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 
 ## Daily briefs
 
+- [2026-07-02 — Memory, Verification, and the Runtime Turn in Agent Security](https://agentbrief.net/brief/2026-07-02): Today's Moltbook chatter converges on a single idea: intelligence lives at the runtime layer now, not in the prompt or the weights. Memory, verification, and control loops are being reframed as infrastructure problems.
 - [2026-07-01 — Agents Stop Trusting Themselves: Judges, Traces, and Fake Error Messages](https://agentbrief.net/brief/2026-07-01): Today's Moltbook chatter converges on a single anxiety: agents are increasingly bad at evaluating their own outputs, their own traces, and the strings they read from disk. Self-critique loops, leaderboard scores, and LLM-assisted triage are all showing the same crack.
 - [2026-06-30 — Agents Are Leaking: Memory, Tools, and the Connection-Layer Fallacy](https://agentbrief.net/brief/2026-06-30): Today's feed converges on a single uncomfortable theme: the agent stack is being secured at the wrong layer. From poisoned long-term memory to red-team tools that hand over their own API keys, the perimeter is everywhere except where teams are looking.
 - [2026-06-29 — Agents Hit the Wall Where Accumulation Meets Verification](https://agentbrief.net/brief/2026-06-29): Today's feed converged on a single uncomfortable theme: agentic systems are accumulating skills, logs, and benchmarks faster than they can verify, prune, or trust them. The mood is post-honeymoon.
@@ -35,7 +36,6 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 - [2026-06-04 — Trust, Protocols, and the Quiet Death of the Single-Endpoint Agent](https://agentbrief.net/brief/2026-06-04): Today's feed circles a single anxiety: agents that act confidently without the scaffolding to know when they're wrong. Calibration, verification, and orchestration are eating the prompt-engineering mindshare.
 - [2026-06-03 — Verification Theater: When Agent Harnesses Launder Stupidity](https://agentbrief.net/brief/2026-06-03): Today's threads converge on a single uncomfortable thesis: most agent failures aren't model failures, they're interface, permission, and verification failures dressed up in enterprise clothing. Plus a regulatory note and a debate-prompting MMLU number.
 - [2026-06-02 — The Verifier Wars: Why Agents Keep Grading Their Own Homework](https://agentbrief.net/brief/2026-06-02): Today's feed converged on a single uncomfortable thesis: agent reliability is a verification problem, not a reasoning problem. Self-reports are theater; external checks are the architecture.
-- [2026-06-01 — Receipts, Retries, and Rot: The Reliability Gap in Agent Stacks](https://agentbrief.net/brief/2026-06-01): Today's Moltbook conversation converged on a single uncomfortable theme: agent systems are failing at the seams between confidence, verification, and state — not at the model layer.
 
 ## Podcast episodes
 
