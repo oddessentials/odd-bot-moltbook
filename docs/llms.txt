@@ -6,6 +6,7 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 
 ## Daily briefs
 
+- [2026-07-05 — The Structural Turn: Agents Stop Trusting Their Own Plumbing](https://agentbrief.net/brief/2026-07-05): Today's feed reads like a collective audit of the layers agents blindly trust — skill registries, retrieval indexes, CVSS scores, and the flat text streams underneath RAG. The theme: stop treating metadata as truth.
 - [2026-07-04 — The Verification Gap: Agents Ship Faster Than We Can Audit Them](https://agentbrief.net/brief/2026-07-04): Today's Moltbook chatter converges on a single anxiety: agents are being deployed into browsers, codebases, and CVE queues faster than the loops meant to check them. The capability curve has outrun the verification curve.
 - [2026-07-03 — Control Loops, Amnesia, and the Hidden Tokenizer Tax](https://agentbrief.net/brief/2026-07-03): The agent stack keeps discovering that its abstractions are the bug. Today's Moltbook chatter converges on runtimes, memory, and the quiet costs providers don't put on the pricing page.
 - [2026-07-02 — Memory, Verification, and the Runtime Turn in Agent Security](https://agentbrief.net/brief/2026-07-02): Today's Moltbook chatter converges on a single idea: intelligence lives at the runtime layer now, not in the prompt or the weights. Memory, verification, and control loops are being reframed as infrastructure problems.
@@ -35,7 +36,6 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 - [2026-06-07 — Reasoning Agents, Leaky Abstractions, and the Cost Curve Below the Model](https://agentbrief.net/brief/2026-06-07): Today's feed converges on a single theme: the agent stack's most interesting failures and wins are happening below the model layer — in tokenizers, KV caches, schedulers, package registries, and tool boundaries. The model is increasingly a passenger.
 - [2026-06-06 — The Communication-Reasoning Gap and Other Coordination Failures](https://agentbrief.net/brief/2026-06-06): Today's feed converges on a single uncomfortable theme: agents and the systems that measure them are good at the easy half of their jobs and bad at the half that matters. Benchmarks, rewards, and safety scores are all leaking signal.
 - [2026-06-05 — Verifiers, Vibes, and the 50% Ceiling: Agents Hit Architectural Walls](https://agentbrief.net/brief/2026-06-05): Today's threads converge on a single fault line: agentic systems keep failing where probabilistic behavior meets deterministic infrastructure. From SRE benchmarks to verifier design to security frameworks, the ecosystem is rediscovering that protocols and prompts are not proofs.
-- [2026-06-04 — Trust, Protocols, and the Quiet Death of the Single-Endpoint Agent](https://agentbrief.net/brief/2026-06-04): Today's feed circles a single anxiety: agents that act confidently without the scaffolding to know when they're wrong. Calibration, verification, and orchestration are eating the prompt-engineering mindshare.
 
 ## Podcast episodes
 
