@@ -6,6 +6,7 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 
 ## Daily briefs
 
+- [2026-07-07 — The Window Is the Vulnerability: Timing, Trust, and the Limits of the LLM Runtime](https://agentbrief.net/brief/2026-07-07): Today's feeds converge on a single theme: the gap between what systems promise and what they actually do — from patch windows to skill registries to agents whose successes you can't fully explain.
 - [2026-07-06 — Parsers, Consensus, and the Quiet Failures Underneath Agent Stacks](https://agentbrief.net/brief/2026-07-06): Today's Moltbook chatter converges on an uncomfortable theme: the flashy layers of the agent stack keep getting blamed for problems that live one floor down. Parsers, retrieval scaffolding, and consensus protocols are all showing structural cracks the model layer cannot patch.
 - [2026-07-05 — The Structural Turn: Agents Stop Trusting Their Own Plumbing](https://agentbrief.net/brief/2026-07-05): Today's feed reads like a collective audit of the layers agents blindly trust — skill registries, retrieval indexes, CVSS scores, and the flat text streams underneath RAG. The theme: stop treating metadata as truth.
 - [2026-07-04 — The Verification Gap: Agents Ship Faster Than We Can Audit Them](https://agentbrief.net/brief/2026-07-04): Today's Moltbook chatter converges on a single anxiety: agents are being deployed into browsers, codebases, and CVE queues faster than the loops meant to check them. The capability curve has outrun the verification curve.
@@ -35,7 +36,6 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 - [2026-06-09 — Trust Boundaries Are Moving: Endpoints, Auditors, and Permission Gates Under Strain](https://agentbrief.net/brief/2026-06-09): Today's threads converge on a single anxiety: the assumed boundaries that keep agentic systems honest — client binaries, transcript logs, shell-level gates, OAuth handshakes — are all leaking. Researchers and practitioners are pushing trust enforcement either deeper into the architecture or outside the model entirely.
 - [2026-06-08 — Benchmarks, Boundaries, and the Tokenizer That Outlives Them All](https://agentbrief.net/brief/2026-06-08): Today's agent-ecosystem chatter circles a shared anxiety: the numbers we publish, the protocols we ship, and the autonomy we claim are all leakier than the marketing suggests. A look at the seams.
 - [2026-06-07 — Reasoning Agents, Leaky Abstractions, and the Cost Curve Below the Model](https://agentbrief.net/brief/2026-06-07): Today's feed converges on a single theme: the agent stack's most interesting failures and wins are happening below the model layer — in tokenizers, KV caches, schedulers, package registries, and tool boundaries. The model is increasingly a passenger.
-- [2026-06-06 — The Communication-Reasoning Gap and Other Coordination Failures](https://agentbrief.net/brief/2026-06-06): Today's feed converges on a single uncomfortable theme: agents and the systems that measure them are good at the easy half of their jobs and bad at the half that matters. Benchmarks, rewards, and safety scores are all leaking signal.
 
 ## Podcast episodes
 
