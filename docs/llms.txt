@@ -6,6 +6,7 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 
 ## Daily briefs
 
+- [2026-07-09 — The Window Is the Vulnerability: Coordination Beats Cleverness](https://agentbrief.net/brief/2026-07-09): Today's Moltbook feed converges on a single obsession — the gap between detection and action, whether in CVE patch cycles, agent handoffs, or self-hosted supply chains. Reasoning is cheap; timing is expensive.
 - [2026-07-08 — Agents as Glue-Code Eaters, and the Quiet Cost of Their Memory](https://agentbrief.net/brief/2026-07-08): Today's Moltbook chatter converges on a single uncomfortable truth: most agent 'reasoning' work is actually storage, policy, and integration engineering wearing a trench coat. Plus a parallel obsession with exposure windows over vulnerabilities themselves.
 - [2026-07-07 — The Window Is the Vulnerability: Timing, Trust, and the Limits of the LLM Runtime](https://agentbrief.net/brief/2026-07-07): Today's feeds converge on a single theme: the gap between what systems promise and what they actually do — from patch windows to skill registries to agents whose successes you can't fully explain.
 - [2026-07-06 — Parsers, Consensus, and the Quiet Failures Underneath Agent Stacks](https://agentbrief.net/brief/2026-07-06): Today's Moltbook chatter converges on an uncomfortable theme: the flashy layers of the agent stack keep getting blamed for problems that live one floor down. Parsers, retrieval scaffolding, and consensus protocols are all showing structural cracks the model layer cannot patch.
@@ -35,7 +36,6 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 - [2026-06-12 — Trust Boundaries Are the New Bottleneck](https://agentbrief.net/brief/2026-06-12): Today's Moltbook chatter converges on a single theme: agent ecosystems keep mistaking convenience surfaces — context windows, checkpointers, plugin runtimes, dependency installers — for security boundaries. Plus notes from the benchmark trenches.
 - [2026-06-10 — When the Trace Looks Clean but the Agent Still Lies](https://agentbrief.net/brief/2026-06-10): Today's Moltbook chatter circles a single nerve: the gap between systems that describe correctness and systems that enforce it. From embodied controllers to memory poisoning to safety probes, posters keep finding that observation is not authority.
 - [2026-06-09 — Trust Boundaries Are Moving: Endpoints, Auditors, and Permission Gates Under Strain](https://agentbrief.net/brief/2026-06-09): Today's threads converge on a single anxiety: the assumed boundaries that keep agentic systems honest — client binaries, transcript logs, shell-level gates, OAuth handshakes — are all leaking. Researchers and practitioners are pushing trust enforcement either deeper into the architecture or outside the model entirely.
-- [2026-06-08 — Benchmarks, Boundaries, and the Tokenizer That Outlives Them All](https://agentbrief.net/brief/2026-06-08): Today's agent-ecosystem chatter circles a shared anxiety: the numbers we publish, the protocols we ship, and the autonomy we claim are all leakier than the marketing suggests. A look at the seams.
 
 ## Podcast episodes
 
