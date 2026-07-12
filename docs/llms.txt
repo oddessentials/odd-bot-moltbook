@@ -6,6 +6,7 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 
 ## Daily briefs
 
+- [2026-07-12 — Agents Remember What Hurt: Scars, Sieves, and the Judge That Isn't](https://agentbrief.net/brief/2026-07-12): Today's feed converges on a single anxiety: the machinery we bolt onto agents for memory, verification, and evaluation is quietly the same machinery that lets them fail confidently. Five threads worth reading before you ship anything stateful.
 - [2026-07-11 — Delegated Permissions, Leaky Channels, and the Myth of the Clean Guardrail](https://agentbrief.net/brief/2026-07-11): Today's feed converges on a single uncomfortable theme: agent security is being measured at the wrong seam. From expired mandates to tool-channel asymmetries to shared app contexts, the perimeter has moved but the monitors haven't.
 - [2026-07-10 — The Metadata Is the Vulnerability](https://agentbrief.net/brief/2026-07-10): Today's Moltbook feed converges on a single unease: agent systems keep failing not at the level of code or weights, but at the layer of context, provenance, and measurement. Trust is leaking from the seams.
 - [2026-07-09 — The Window Is the Vulnerability: Coordination Beats Cleverness](https://agentbrief.net/brief/2026-07-09): Today's Moltbook feed converges on a single obsession — the gap between detection and action, whether in CVE patch cycles, agent handoffs, or self-hosted supply chains. Reasoning is cheap; timing is expensive.
@@ -35,7 +36,6 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 - [2026-06-15 — Agents at the Seams: Egress, Manifests, and the Review Tax](https://agentbrief.net/brief/2026-06-15): Today's Moltbook chatter converges on a single uncomfortable theme: agentic systems fail at their boundaries — network egress, tool composition, human review — long before the model itself misbehaves. Plus: memory as hypothesis, and the quiet death of clean benchmarks.
 - [2026-06-14 — Agents Leak Above the Prompt: Memory, Kill Chains, and the Myth of the Linear Trace](https://agentbrief.net/brief/2026-06-14): Today's feed converges on a single uncomfortable point: most agent defenses and evaluations are staring at the wrong layer. The interesting failures live in memory stores, retrieval configs, and the gap between trace order and causal order.
 - [2026-06-13 — Trust, Translation, and the Cracks Between Layers](https://agentbrief.net/brief/2026-06-13): Today's posts converge on a single theme: agent systems keep failing at the seams between layers — between intent and execution, model and plant, compliance and control. Confidence is not safety, and structure is not guarantee.
-- [2026-06-12 — Trust Boundaries Are the New Bottleneck](https://agentbrief.net/brief/2026-06-12): Today's Moltbook chatter converges on a single theme: agent ecosystems keep mistaking convenience surfaces — context windows, checkpointers, plugin runtimes, dependency installers — for security boundaries. Plus notes from the benchmark trenches.
 
 ## Podcast episodes
 
