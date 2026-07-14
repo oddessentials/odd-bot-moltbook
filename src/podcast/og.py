@@ -65,12 +65,61 @@ _TW_TITLE_RE = re.compile(r'<meta[^>]*\bname="twitter:title"[^>]*/?>', re.IGNORE
 _TW_DESC_RE = re.compile(r'<meta[^>]*\bname="twitter:description"[^>]*/?>', re.IGNORECASE)
 
 # SEO-enrichment anchors — parity with src/publish.py. Canonical + meta
-# description are rewritten in place; </head> and the empty #root div are
+# description are rewritten in place; </head> and the #root div are the
 # injection points for structured data + the prerendered body.
 _CANONICAL_RE = re.compile(r'<link[^>]*\brel="canonical"[^>]*/?>', re.IGNORECASE)
 _META_DESC_RE = re.compile(r'<meta[^>]*\bname="description"[^>]*/?>', re.IGNORECASE)
 _HEAD_CLOSE_RE = re.compile(r"</head>", re.IGNORECASE)
-_ROOT_DIV_RE = re.compile(r'<div id="root">\s*</div>', re.IGNORECASE)
+# The SPA mount point. It is empty in the fresh Vite shell
+# (`<div id="root"></div>`), but the daily pipeline's home-route prerender
+# fills it with the homepage body before it lands in docs/index.html — which
+# is exactly the file this generator reads. So we locate the root div and its
+# nesting-aware close and swap the *episode* body in, rather than assuming the
+# div is empty (post-build, it is not). See _fill_root_div.
+_ROOT_OPEN_RE = re.compile(r'<div id="root">', re.IGNORECASE)
+# Match only the <div>/</div> tag openers, never their attributes: a pattern
+# that consumed through to `>` (e.g. `<div[^>]*>`) would mis-terminate on a
+# literal `>` inside an attribute value. This is a tokeniser, not an HTML
+# parser — it assumes the root body contains no `<div>` inside an HTML comment
+# or a script/style text node. That holds today because the body is
+# React-escaped prerender output (no raw comments; all text `<`/`>` escaped);
+# if a future prerender emits either, this depth count could miscount — the
+# guarantee lives here, revisit if that changes.
+_DIV_BOUNDARY_RE = re.compile(r'</?div\b', re.IGNORECASE)
+
+
+def _fill_root_div(html_str: str, body_html: str, *, context: str) -> str:
+    """Return *html_str* with the single ``<div id="root">…</div>``'s inner
+    content replaced by *body_html*.
+
+    Tolerates a root that is empty (fresh Vite shell) or already populated with
+    a prerendered homepage body (post-build ``docs/index.html``). The matching
+    close tag is found by counting ``<div>``/``</div>`` boundaries out from the
+    open, so a prerendered body carrying its own nested ``<div>``s is swapped
+    out as a whole rather than truncated at its first inner ``</div>``.
+
+    Raises RuntimeError — the template-drift alarm — if the root div is absent,
+    duplicated, or never closed.
+    """
+    opens = list(_ROOT_OPEN_RE.finditer(html_str))
+    if len(opens) != 1:
+        raise RuntimeError(
+            f'{context}: expected exactly one <div id="root">; got '
+            f"{len(opens)}. Template drift — check agent-brief/client/index.html"
+        )
+    inner_start = opens[0].end()
+    depth = 1  # the root open tag we just matched
+    for m in _DIV_BOUNDARY_RE.finditer(html_str, inner_start):
+        if m.group(0).lower().startswith("</div"):
+            depth -= 1
+            if depth == 0:
+                return html_str[:inner_start] + body_html + html_str[m.start():]
+        else:
+            depth += 1
+    raise RuntimeError(
+        f'{context}: <div id="root"> is never closed. '
+        "Template drift — check agent-brief/client/index.html"
+    )
 
 
 def render_episode_og_html(template_html: str, record: EpisodeRecord) -> str:
@@ -159,12 +208,7 @@ def render_episode_og_html(template_html: str, record: EpisodeRecord) -> str:
             " Template drift — check agent-brief/client/index.html"
         )
     body_html = seo.prerender_episode_html(payload)
-    out, n_root = _ROOT_DIV_RE.subn(lambda _m: f'<div id="root">{body_html}</div>', out)
-    if n_root != 1:
-        raise RuntimeError(
-            'per-episode HTML render: expected exactly one empty <div id="root">;'
-            f" got {n_root}. Template drift — check agent-brief/client/index.html"
-        )
+    out = _fill_root_div(out, body_html, context="per-episode HTML render")
     return out
 
 

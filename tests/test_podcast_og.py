@@ -43,6 +43,20 @@ _TEMPLATE_HTML = """\
 """
 
 
+# The real post-build docs/index.html the generator reads is NOT the empty Vite
+# shell above: the daily pipeline's home-route prerender fills #root with the
+# homepage body (nested <div>s and all) before it is written. This fixture
+# mirrors that state so the renderer is exercised against what production
+# actually feeds it — the case whose absence let the prerender work drift the
+# podcast pipeline into a two-week outage.
+_PRERENDERED_ROOT_TEMPLATE = _TEMPLATE_HTML.replace(
+    '<div id="root"></div>',
+    '<div id="root"><main><h1>The Agent Brief</h1>'
+    '<div class="feed"><article><a href="/brief/x">Latest</a></div></article>'
+    '<nav><div><div>deeply</div> nested</div></nav></main></div>',
+)
+
+
 def _record(**overrides) -> EpisodeRecord:
     payload = {
         "id": "ep-001",
@@ -92,6 +106,81 @@ class TestRenderEpisodeOgHtml(unittest.TestCase):
         self.assertNotIn('<div id="root"></div>', out)
         self.assertIn('<div id="root"><article>', out)
         self.assertIn("<h1>When Agents Optimize the Scorecard (Ep. 1)</h1>", out)
+
+    def test_renders_over_prerendered_root(self):
+        # Regression: the generator reads the post-build docs/index.html, whose
+        # #root already holds the prerendered homepage body. The episode body
+        # must fully replace it — this is the case that broke the pipeline.
+        out = render_episode_og_html(_PRERENDERED_ROOT_TEMPLATE, _record())
+        self.assertIn('<div id="root"><article>', out)
+        self.assertIn("<h1>When Agents Optimize the Scorecard (Ep. 1)</h1>", out)
+        # No homepage residue survives inside root.
+        self.assertNotIn("<h1>The Agent Brief</h1>", out)
+        self.assertNotIn('class="feed"', out)
+        self.assertNotIn("deeply", out)
+        self.assertNotIn("/brief/x", out)
+        # Document tail past root is left intact.
+        self.assertIn("</body>", out)
+        self.assertIn("</html>", out)
+
+    def test_prerendered_and_empty_root_render_identically(self):
+        # The empty Vite shell and the prerendered docs/index.html differ ONLY
+        # in #root's contents, which the renderer overwrites either way — so the
+        # two must yield byte-identical output. This proves both that no
+        # homepage residue leaks through and that the empty-root path (used by
+        # the daily _emit_per_episode_pages caller) is behaviorally unchanged.
+        out_empty = render_episode_og_html(_TEMPLATE_HTML, _record())
+        out_filled = render_episode_og_html(_PRERENDERED_ROOT_TEMPLATE, _record())
+        self.assertEqual(out_empty, out_filled)
+
+    def test_nested_divs_in_root_not_truncated(self):
+        # A naive non-greedy regex would stop at the first inner </div>, leaving
+        # a broken tail. The balanced scan must consume the whole nested body.
+        out = render_episode_og_html(_PRERENDERED_ROOT_TEMPLATE, _record())
+        self.assertEqual(out.count('<div id="root">'), 1)
+        # exactly one </div> — root's own close (episode body carries none).
+        self.assertEqual(out.count("</div>"), 1)
+        self.assertNotIn("<nav>", out)
+
+    def test_div_attribute_with_gt_not_mis_terminated(self):
+        # A div inside root whose attribute value holds a literal '>' must not
+        # fool the boundary scan into closing early. Regression lock for the
+        # adversarial-review hardening (tokeniser matches tag openers, not
+        # attributes); a `<div[^>]*>` form would mis-terminate here and leave
+        # residue after the tricky div.
+        filled = _TEMPLATE_HTML.replace(
+            '<div id="root"></div>',
+            '<div id="root"><div data-q="a>b"><span>home</span></div>'
+            '<p>tail still in root</p></div>',
+        )
+        out = render_episode_og_html(filled, _record())
+        self.assertEqual(out.count('<div id="root">'), 1)
+        self.assertIn('<div id="root"><article>', out)
+        self.assertNotIn('data-q="a>b"', out)        # inner home div evicted
+        self.assertNotIn("tail still in root", out)   # and content after it
+        self.assertIn("</body>", out)
+
+    def test_missing_root_div_raises(self):
+        broken = _TEMPLATE_HTML.replace(
+            '<div id="root"></div>', '<div id="app"></div>')
+        with self.assertRaises(RuntimeError) as cm:
+            render_episode_og_html(broken, _record())
+        self.assertIn('<div id="root">', str(cm.exception))
+
+    def test_duplicate_root_div_raises(self):
+        broken = _TEMPLATE_HTML.replace(
+            '<div id="root"></div>',
+            '<div id="root"></div><div id="root"></div>')
+        with self.assertRaises(RuntimeError) as cm:
+            render_episode_og_html(broken, _record())
+        self.assertIn("got 2", str(cm.exception))
+
+    def test_unclosed_root_div_raises(self):
+        broken = _TEMPLATE_HTML.replace(
+            '<div id="root"></div>', '<div id="root">')
+        with self.assertRaises(RuntimeError) as cm:
+            render_episode_og_html(broken, _record())
+        self.assertIn("never closed", str(cm.exception))
 
     def test_static_brand_tags_preserved(self):
         # og:image, og:site_name, twitter:image, twitter:card MUST NOT
