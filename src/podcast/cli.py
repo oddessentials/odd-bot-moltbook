@@ -407,33 +407,66 @@ def cmd_run(args: argparse.Namespace) -> int:
         if rc != 0:
             return rc
 
-    # Phase 2: produce-segments. Always invoked — even if validation_status
-    # is already segments_complete or beyond, we still need each segment's
-    # process_segment idempotency-skip path to re-run validate_segment_outputs
-    # against the artifacts on disk. Skipping based on validation_status
-    # alone would let an out-of-band corruption (file deleted, partial
-    # overwrite, manifest tampering) bypass the gate. The re-validation is
-    # cheap (~100ms per already-complete segment) and process_segment
-    # short-circuits without touching ElevenLabs/Hedra when the gates pass.
-    rc = cmd_produce_segments(
-        argparse.Namespace(
-            episode_id=eid,
-            parallel=args.parallel,
-            max_attempts=args.max_attempts,
-        )
+    # Once the episode's video is on YouTube, that upload is the source of
+    # truth: the site embeds it by id and never serves the local .mp4, so the
+    # produce → stitch → upload phases — whose only job is to CREATE the video
+    # — have nothing left to do. On a re-run of an already-uploaded episode we
+    # skip straight to OG + publish, keyed on the durable youtube_id rather
+    # than on local scratch. This is the resumability invariant: a stranded run
+    # posts on retry without re-running the expensive produce/stitch, so an OG
+    # bug or an evicted segment can no longer strand a finished video.
+    #
+    # Gate is `>= "uploaded"`, NOT `>= "video_uploaded"`: cmd_upload writes the
+    # episode_record and youtube_caption_id only on reaching "uploaded", and the
+    # tail (cmd_og and publish gates G2/G4) hard-requires both. An episode
+    # stranded at exactly "video_uploaded" must fall through to cmd_upload to
+    # finish those, not fast-path.
+    #
+    # This skips CREATE work, not publish-time validation: publish still
+    # re-verifies the live YouTube video (gate G1) and re-ffprobes the local
+    # final.mp4 (gate G3), so the stitched artifact must still be on disk — true
+    # for the normal stranded case (just built), but not one where local media
+    # was manually deleted.
+    manifest = read_manifest(mpath) if mpath.exists() else {}
+    video_on_youtube = bool(manifest.get("youtube_id")) and is_at_or_past(
+        manifest.get("validation_status"), "uploaded"
     )
-    if rc != 0:
-        return rc
+    if video_on_youtube:
+        print(
+            f"[run] video already on YouTube "
+            f"(youtube_id={manifest['youtube_id']!r}, "
+            f"validation_status={manifest.get('validation_status')!r}); "
+            "skipping produce/stitch/upload — going straight to publish."
+        )
+    else:
+        # Phase 2: produce-segments. Always invoked pre-upload — even at
+        # segments_complete or beyond — so each segment re-runs
+        # validate_segment_outputs against the on-disk artifacts. Skipping on
+        # validation_status alone would let an out-of-band corruption (file
+        # deleted, partial overwrite, manifest tampering) reach YouTube. The
+        # re-validation is cheap (~100ms per already-complete segment) and
+        # process_segment short-circuits without touching ElevenLabs/Hedra when
+        # the gates pass. (Once the video is uploaded, the fast path above
+        # skips this entirely — see video_on_youtube.)
+        rc = cmd_produce_segments(
+            argparse.Namespace(
+                episode_id=eid,
+                parallel=args.parallel,
+                max_attempts=args.max_attempts,
+            )
+        )
+        if rc != 0:
+            return rc
 
-    # Phase 3: stitch. cmd_stitch is idempotent for non-forced runs.
-    rc = cmd_stitch(argparse.Namespace(episode_id=eid, force=False))
-    if rc != 0:
-        return rc
+        # Phase 3: stitch. cmd_stitch is idempotent for non-forced runs.
+        rc = cmd_stitch(argparse.Namespace(episode_id=eid, force=False))
+        if rc != 0:
+            return rc
 
-    # Phase 4: upload. Already idempotent on youtube_id + youtube_caption_id.
-    rc = cmd_upload(argparse.Namespace(episode_id=eid))
-    if rc != 0:
-        return rc
+        # Phase 4: upload. Already idempotent on youtube_id + youtube_caption_id.
+        rc = cmd_upload(argparse.Namespace(episode_id=eid))
+        if rc != 0:
+            return rc
 
     # Phase 5: per-episode OG page. Renders deterministically from the
     # SPA template; safe to re-run (atomic write produces same bytes
@@ -457,6 +490,70 @@ def cmd_run(args: argparse.Namespace) -> int:
     return atomic_publish_and_verify(
         episode_id=eid, manifest_path=mpath,
     )
+
+
+def cmd_resume_publish(args: argparse.Namespace) -> int:
+    """Post an already-uploaded episode, skipping produce/stitch/upload.
+
+    Manual recovery verb for a run that produced + uploaded a video to YouTube
+    but died before publishing (e.g. an OG-generation failure stranded it).
+    Requires the local manifest to still record a youtube_id — the durable
+    proof the video exists — and refuses otherwise, so it can NEVER trigger
+    ElevenLabs/Hedra spend. Runs only OG + atomic publish (the same tail as
+    `run`'s fast path).
+
+    Like `run`, this mutates local state (data/episodes.json, docs/) but does
+    not commit/push — that is the wrapper's job. Invoke it under the wrapper,
+    or commit `data/episodes.json docs/` yourself, so the next reconcile does
+    not halt on a dirty worktree.
+    """
+    eid = args.episode_id
+    mpath = manifest_path_for(eid)
+    if not mpath.exists():
+        print(
+            f"manifest missing at {mpath} — nothing to resume "
+            "(the local manifest is the resume state).",
+            file=sys.stderr,
+        )
+        return 2
+    try:
+        manifest = read_manifest(mpath)
+    except (ValueError, OSError) as e:  # JSONDecodeError is a ValueError
+        print(
+            f"manifest at {mpath} is unreadable ({e}) — cannot resume.",
+            file=sys.stderr,
+        )
+        return 2
+    if not (
+        manifest.get("youtube_id")
+        and is_at_or_past(manifest.get("validation_status"), "uploaded")
+    ):
+        print(
+            f"refusing to resume-publish {eid}: not a fully-uploaded episode "
+            f"(youtube_id={manifest.get('youtube_id')!r}, "
+            f"validation_status={manifest.get('validation_status')!r}; "
+            "need youtube_id and validation_status >= 'uploaded'). "
+            "Run `run` to produce + upload first.",
+            file=sys.stderr,
+        )
+        return 2
+    print(
+        f"[resume-publish] video on YouTube "
+        f"(youtube_id={manifest['youtube_id']!r}); rendering OG + publishing."
+    )
+    rc = cmd_og(argparse.Namespace(episode_id=eid))
+    if rc != 0:
+        return rc
+    from .publish_atomic import atomic_publish_and_verify
+    rc = atomic_publish_and_verify(episode_id=eid, manifest_path=mpath)
+    if rc == 0:
+        print(
+            "[resume-publish] published to local state — NOT committed/pushed. "
+            "Commit `data/episodes.json docs/` and push (or invoke under "
+            "scripts/run-weekly-podcast.sh) so podcast-x-post.yml fires and the "
+            "next reconcile does not halt on a dirty worktree."
+        )
+    return rc
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -559,6 +656,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Wipe stale episode dir and restart from scratch.",
     )
 
+    p_resume = sub.add_parser(
+        "resume-publish",
+        help=(
+            "Post an episode whose video is already on YouTube — runs only "
+            "OG + publish, skipping produce/stitch/upload. Refuses unless the "
+            "manifest records a youtube_id, so it can never re-render/re-spend. "
+            "For recovering a run that died after upload but before publish."
+        ),
+    )
+    p_resume.add_argument("--episode-id", default="ep-001")
+
     args = parser.parse_args(argv)
     if args.cmd == "show-corpus":
         # Read-only diagnostic — does not contend with concurrent runs.
@@ -573,6 +681,7 @@ def main(argv: list[str] | None = None) -> int:
         "publish": cmd_publish,
         "flip-public": cmd_flip_public,
         "run": cmd_run,
+        "resume-publish": cmd_resume_publish,
     }
     handler = locked_dispatch.get(args.cmd)
     if handler is None:

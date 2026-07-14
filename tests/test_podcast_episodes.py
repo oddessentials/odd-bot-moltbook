@@ -199,6 +199,22 @@ class TestPublishEpisodeGates(unittest.TestCase):
                 fake_verify=lambda *, credentials, video_id: fake(credentials, video_id),
             )
 
+    def test_g1_privacy_status_mismatch_refused(self):
+        # Video exists and the id matches, but its privacyStatus no longer
+        # matches the manifest's expected visibility (e.g. made private / taken
+        # down after upload). Publishing would embed a broken video. G1 must
+        # refuse — this is the check cmd_run's fast path and resume-publish rely
+        # on, since they skip cmd_upload's own privacyStatus verification.
+        with tempfile.TemporaryDirectory() as td:
+            tdp = Path(td)
+            mpath, _, _ = _seed(tdp)  # visibility defaults to "unlisted"
+            self._expect_no_write_and_gate(
+                tdp=tdp, mpath=mpath, gate_token="G1",
+                fake_verify=lambda *, credentials, video_id: {
+                    "id": video_id, "status": {"privacyStatus": "private"},
+                },
+            )
+
     def test_g2_missing_episode_record(self):
         with tempfile.TemporaryDirectory() as td:
             tdp = Path(td)

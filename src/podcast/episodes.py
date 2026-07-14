@@ -38,6 +38,7 @@ from typing import Any
 from pydantic import RootModel, ValidationError
 
 from .config import (
+    DEFAULT_VISIBILITY,
     EPISODE_DURATION_MAX_SEC,
     EPISODE_DURATION_MIN_SEC,
     EPISODES_PUBLIC_PATH,
@@ -117,6 +118,21 @@ def _gate_g1_youtube_verify(*, manifest: dict, credentials) -> str:
     if record.get("id") != video_id:
         raise PublishGateError(
             f"G1 videos.list returned id {record.get('id')!r} != {video_id!r}"
+        )
+    # Re-verify the live video's privacy still matches the manifest's expected
+    # visibility. cmd_upload does this check, but cmd_run's fast path and
+    # resume-publish skip cmd_upload for an already-uploaded video — so the
+    # publish gate must be the un-skippable place it happens, else a video made
+    # private / region-blocked after upload would publish a broken site embed.
+    # (Outright deletion is already caught: videos.list returns no item and
+    # verify_youtube_video raises above.)
+    expected_visibility = manifest.get("visibility", DEFAULT_VISIBILITY)
+    actual_privacy = (record.get("status") or {}).get("privacyStatus")
+    if actual_privacy != expected_visibility:
+        raise PublishGateError(
+            f"G1 video {video_id!r} privacyStatus is {actual_privacy!r}, "
+            f"expected {expected_visibility!r} — refusing to publish an "
+            "unexpected/broken embed"
         )
     return video_id
 
