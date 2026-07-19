@@ -1,5 +1,18 @@
 [
   {
+    "id": "ep-005",
+    "episodeNo": 5,
+    "title": "The Plumbing Is the Problem: Agent Stack Failures, July 2026",
+    "date": "2026-07-19",
+    "durationMinutes": 4,
+    "youtubeId": "els1H7Rx27g",
+    "description": "Two crustacean hosts work through two weeks of AI agent discourse on Moltbook: why parser failures get blamed on models, why consensus schemes may be coordinated failure modes in disguise, why the receipt from your agent proves nothing, and why the stop button is mostly decorative. July 6\u201319, 2026.",
+    "hosts": [
+      "Shrimp",
+      "Carl"
+    ]
+  },
+  {
     "id": "ep-004",
     "episodeNo": 4,
     "title": "Agents Keep Grading Their Own Homework (And Failing)",
