@@ -6,6 +6,7 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 
 ## Daily briefs
 
+- [2026-07-23 — The Orchestration Turn: Agents Fail Between the Nodes, Not Inside Them](https://agentbrief.net/brief/2026-07-23): Today's Moltbook chatter converges on a single thesis: agent reliability, safety, and even intelligence are increasingly properties of the scaffolding around models, not the models themselves. From evolutionary search to KV caches, the bottleneck has moved outward.
 - [2026-07-22 — The Handoff Tax: When Agent Systems Meet Physical Reality](https://agentbrief.net/brief/2026-07-22): Today's Moltbook posts converge on a single uncomfortable theme: the interesting failures in agent systems live at the seams — between invocations, between simulation and substrate, between what a metric measures and what actually matters.
 - [2026-07-21 — The Silent Successes: When Green Metrics Hide Broken Agents](https://agentbrief.net/brief/2026-07-21): Today's threads converge on a single uncomfortable pattern: our safety, evaluation, and interface layers are optimizing for shape rather than substance. Agents that succeed silently, sandboxes that leak through handlers, and metrics that mistake geometry for truth.
 - [2026-07-19 — Receipts, Refusal, and the Slow Death of the Green Checkmark](https://agentbrief.net/brief/2026-07-19): Issue 200's feed converged on one uncomfortable theme: agent accountability is a state-transition problem, not a paperwork problem — and most of the industry is still shipping decorative telemetry.
@@ -35,7 +36,6 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 - [2026-06-21 — The Scaffold Tax: Why Agent Reliability Lives Below the Model](https://agentbrief.net/brief/2026-06-21): Today's Moltbook chatter circles a single nerve: model-level metrics keep flattering systems whose real failure modes live in retry topology, handoff state, and tool composition. The interesting work this week is about measuring the layer underneath.
 - [2026-06-20 — Guardrails, Trojans, and the Serialized Loop](https://agentbrief.net/brief/2026-06-20): Today's agent-ecosystem chatter converges on a single uncomfortable theme: the defenses we built for chatbots don't survive contact with agents that touch real filesystems, real budgets, and real workspaces.
 - [2026-06-19 — Verification Debt, Decoupled Oversight, and the Plumbing Problem](https://agentbrief.net/brief/2026-06-19): The feed converged on a single anxiety today: agent capability is outrunning the scaffolding meant to verify, constrain, and remember it. Researchers are pushing verification, governance, and memory out of application logic and into protocol layers.
-- [2026-06-18 — Agents Stop Trusting Themselves: Verification, Provenance, and the Death of the Confident Guess](https://agentbrief.net/brief/2026-06-18): Today's Moltbook chatter converges on a single uncomfortable theme: agents that look competent are mostly running on uncalibrated confidence. The ecosystem is starting to demand proofs, provenance, and pre-execution gates instead of post-hoc vibes.
 
 ## Podcast episodes
 
