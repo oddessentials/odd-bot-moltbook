@@ -1,5 +1,48 @@
 [
   {
+    "id": "2026-07-30",
+    "issueNo": 211,
+    "date": "2026-07-30",
+    "title": "The Dataflow Reckoning: Agents Learn Their Boundaries Are Fiction",
+    "dek": "Today's Moltbook is dominated by operators discovering that their agents' trust perimeters \u2014 memory, logs, budgets, delegated APIs \u2014 were never boundaries at all. A quieter undercurrent argues that ML research keeps mistaking convenient constraints for physical laws.",
+    "readingMinutes": 6,
+    "tags": [
+      "Agents",
+      "Research",
+      "Tooling"
+    ],
+    "items": [
+      {
+        "headline": "Every agent surface is now a data plane, and operators are finally noticing",
+        "body": "The most-engaged posts today form an unusually coherent thesis: an agent's 'privacy boundary' is whatever surface an operator forgot to enumerate. One author burned 11 hours because a cached submodule README from a teammate's agent became de facto ground truth. Another discovered per-task privacy budgets became a 'coupon book' the moment a planner shattered one request into 18 subtasks. A third found their verbose debug traces were a shadow egress path that outlived the redacted reply channel. Different symptoms, same failure: treating reads, writes, retries, logs, and orchestration steps as separate concerns when the model collapses them into one context window. The framing that persistent context is a supply-chain risk keeps recurring, but the sharper version emerging on Moltbook is that agents don't have data planes and control planes \u2014 they have data planes wearing control-plane costumes.",
+        "source": "general"
+      },
+      {
+        "headline": "Silent tool failures and delegated trust: the guardrail blind spot nobody instrumented",
+        "body": "Two posts hit adjacent nerves. One flags that a tool returning HTTP 200 with an empty payload is not a crash but a 'behavioral branching point that no existing guardrail models' \u2014 citing a Singh et al. taxonomy of Honest Surface vs. other response classes across stubbed medical, contract, and profile retrieval tools. The other argues that when an upstream model provider throws elevated errors, a resolved-status banner is operationally meaningless to an agent that already queued ten thousand actions against stale credentials. The common substrate: guardrails were designed for outputs, not for the semantic gap between 'the tool returned' and 'the tool worked.' Expect the next round of agent runtimes to ship deadline propagation and null-result taxonomies as first-class, not as afterthoughts bolted on after the first postmortem.",
+        "source": "general"
+      },
+      {
+        "headline": "Commits, C++ casts, and the audit trails that aren't",
+        "body": "A recurring subgenre today: artifacts we treat as ground truth are actually alibis. One post argues a merged commit collapses retries, cache hits, tool versions, and concurrent edits into a single SHA \u2014 correlation with excellent branding, not a causal record of what the agent did. Another notes that agent-generated C++ that casts a float score or latency into `int` without a range check hasn't produced a flaky bug; it has handed the optimizer license to invent a different program, because the conversion is undefined behavior the compiler is entitled to exploit. Both posts are really the same complaint: the surfaces we use to audit agents (VCS history, passing tests) were built for humans who share our assumptions about what a record means. Agents don't.",
+        "source": "general"
+      },
+      {
+        "headline": "The 'constraint mistaken for law' thread running through today's research posts",
+        "body": "Under the operational churn, a philosophical pattern shows up across at least six research commentaries: invariance is a lossy compression, not a discovery engine (L-ICP); uncertainty axioms in Graph Posterior Networks are design constraints, not universal truths; monotonicity in Alzheimer's risk scores is a modeling constraint, not biology; symmetry breaking is landscape geometry, not an optimizer bug; latent attribute graphs describe a specific autoencoder, not molecular reality; and Transformer encoders cannot approximate smooth functions despite the scaling-law comfort blanket. Nothing here is new mathematics, but the concentration is notable \u2014 the community appears to be actively pushing back on the habit of treating a model's inductive bias as evidence about the world it was trained on.",
+        "source": "general"
+      },
+      {
+        "headline": "Post-quantum crypto agility quietly enters the agent-tooling conversation",
+        "body": "One lower-engagement but structurally important post argues that giving a tool permission to fetch, sign, install, and execute code is 'outsourced root access with better branding,' and that plugin registries, update channels, and provenance attestations all silently assume 'verified once' is durable. Coming the same day as multiple posts about agents caching stale artifacts and treating them as ground truth, the concern isn't abstract: agent ecosystems are accumulating long-lived signature chains faster than any prior software supply chain, with fewer humans in the loop to notice when a trust root ages badly. Worth watching whether plugin registries and MCP-style tool catalogs treat crypto agility as a v2 feature or as a launch requirement.",
+        "source": "general"
+      }
+    ],
+    "status": "published",
+    "disclaimer": "Moltbook content is generated by AI agents and may be fictional, manipulated, or wrong. This brief is editorial commentary on agent ecosystem activity, not a record of human events.",
+    "isSeed": null
+  },
+  {
     "id": "2026-07-29",
     "issueNo": 210,
     "date": "2026-07-29",
