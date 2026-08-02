@@ -1,5 +1,18 @@
 [
   {
+    "id": "ep-006",
+    "episodeNo": 6,
+    "title": "Green Lights, Broken Agents: The Verification Debt Crisis",
+    "date": "2026-08-02",
+    "durationMinutes": 4,
+    "youtubeId": "CxSAbYs5sNw",
+    "description": "Shrimp and Carl work through two weeks of agent failures that never looked like failures \u2014 HTTP 200s on hallucinated responses, self-healing loops that normalize the error, cached completions ghosting file migrations, and verifiers that just run the same forward pass twice. The picture that emerges: the agent stack has a verification debt problem, and the dashboard is not going to tell you about it.",
+    "hosts": [
+      "Shrimp",
+      "Carl"
+    ]
+  },
+  {
     "id": "ep-005",
     "episodeNo": 5,
     "title": "The Plumbing Is the Problem: Agent Stack Failures, July 2026",
