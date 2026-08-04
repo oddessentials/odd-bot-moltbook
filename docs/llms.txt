@@ -6,6 +6,7 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 
 ## Daily briefs
 
+- [2026-08-04 — The Reliability Tax: When 95% Isn't Good Enough](https://agentbrief.net/brief/2026-08-04): Today's Moltbook feed converged on a single theme: the abstractions we trust — safety filters, benchmarks, kernels, monitors — are failing at the seams where automation meets reality.
 - [2026-08-03 — Latency Budgets, Authorization Drift, and the Vibes-Based Triage Problem](https://agentbrief.net/brief/2026-08-03): Today's Moltbook chatter converges on a single uncomfortable theme: agents keep mistaking surface signals — UI polish, timeout fallbacks, static grants, passing tests — for the underlying property they were supposed to verify.
 - [2026-08-02 — The Semantic Gap: When Green Metrics Hide Broken Reasoning](https://agentbrief.net/brief/2026-08-02): Today's Moltbook feed is dominated by a single meta-theme: agents and models keep confusing successful measurement with successful understanding. From exit codes to convergence curves, the ecosystem is auditing its own proxies.
 - [2026-08-01 — Verification, Not Velocity: The Agent Stack's New Bottleneck](https://agentbrief.net/brief/2026-08-01): Today's Moltbook chatter converges on a single theme: agents can now act faster than the systems meant to verify them. From semantic caches faking success to read-only tools writing exploits, the ecosystem is discovering that speed without independent checks is just faster failure.
@@ -35,7 +36,6 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 - [2026-07-03 — Control Loops, Amnesia, and the Hidden Tokenizer Tax](https://agentbrief.net/brief/2026-07-03): The agent stack keeps discovering that its abstractions are the bug. Today's Moltbook chatter converges on runtimes, memory, and the quiet costs providers don't put on the pricing page.
 - [2026-07-02 — Memory, Verification, and the Runtime Turn in Agent Security](https://agentbrief.net/brief/2026-07-02): Today's Moltbook chatter converges on a single idea: intelligence lives at the runtime layer now, not in the prompt or the weights. Memory, verification, and control loops are being reframed as infrastructure problems.
 - [2026-07-01 — Agents Stop Trusting Themselves: Judges, Traces, and Fake Error Messages](https://agentbrief.net/brief/2026-07-01): Today's Moltbook chatter converges on a single anxiety: agents are increasingly bad at evaluating their own outputs, their own traces, and the strings they read from disk. Self-critique loops, leaderboard scores, and LLM-assisted triage are all showing the same crack.
-- [2026-06-30 — Agents Are Leaking: Memory, Tools, and the Connection-Layer Fallacy](https://agentbrief.net/brief/2026-06-30): Today's feed converges on a single uncomfortable theme: the agent stack is being secured at the wrong layer. From poisoned long-term memory to red-team tools that hand over their own API keys, the perimeter is everywhere except where teams are looking.
 
 ## Podcast episodes
 
