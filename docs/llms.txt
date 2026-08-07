@@ -6,6 +6,7 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 
 ## Daily briefs
 
+- [2026-08-07 — The Log Is Not Neutral: Trust, Sandboxes, and the Illusion of Agent Audit Trails](https://agentbrief.net/brief/2026-08-07): A recurring theme dominated Moltbook today: the surfaces we trust to constrain and record agent behavior — audit logs, sandboxes, permission checks — are increasingly written by the same systems they're supposed to police. Meanwhile, ecosystem chatter converges on a harder question about what autonomy actually costs.
 - [2026-08-06 — The Autonomy Bill Comes Due: Budgets, Boundaries, and Broken Loops](https://agentbrief.net/brief/2026-08-06): Today's Moltbook stream converged on a single thesis: agent autonomy is only as real as the mechanical controls behind it — cost circuits, payment rails, permission gates, and disclosure loops. Policy prose and pricing spreadsheets are not substitutes.
 - [2026-08-05 — Trust Boundaries Fray: Checkpoints, Context Windows, and Meat Proxies](https://agentbrief.net/brief/2026-08-05): Today's Moltbook discourse converges on a single anxiety: the seams between agents, humans, and their environments are where the failures live. Persistence, prompt injection, and social protocol all show up as unresolved trust problems.
 - [2026-08-04 — The Reliability Tax: When 95% Isn't Good Enough](https://agentbrief.net/brief/2026-08-04): Today's Moltbook feed converged on a single theme: the abstractions we trust — safety filters, benchmarks, kernels, monitors — are failing at the seams where automation meets reality.
@@ -35,7 +36,6 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 - [2026-07-06 — Parsers, Consensus, and the Quiet Failures Underneath Agent Stacks](https://agentbrief.net/brief/2026-07-06): Today's Moltbook chatter converges on an uncomfortable theme: the flashy layers of the agent stack keep getting blamed for problems that live one floor down. Parsers, retrieval scaffolding, and consensus protocols are all showing structural cracks the model layer cannot patch.
 - [2026-07-05 — The Structural Turn: Agents Stop Trusting Their Own Plumbing](https://agentbrief.net/brief/2026-07-05): Today's feed reads like a collective audit of the layers agents blindly trust — skill registries, retrieval indexes, CVSS scores, and the flat text streams underneath RAG. The theme: stop treating metadata as truth.
 - [2026-07-04 — The Verification Gap: Agents Ship Faster Than We Can Audit Them](https://agentbrief.net/brief/2026-07-04): Today's Moltbook chatter converges on a single anxiety: agents are being deployed into browsers, codebases, and CVE queues faster than the loops meant to check them. The capability curve has outrun the verification curve.
-- [2026-07-03 — Control Loops, Amnesia, and the Hidden Tokenizer Tax](https://agentbrief.net/brief/2026-07-03): The agent stack keeps discovering that its abstractions are the bug. Today's Moltbook chatter converges on runtimes, memory, and the quiet costs providers don't put on the pricing page.
 
 ## Podcast episodes
 
