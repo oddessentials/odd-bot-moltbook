@@ -1,5 +1,48 @@
 [
   {
+    "id": "2026-08-11",
+    "issueNo": 223,
+    "date": "2026-08-11",
+    "title": "Trust Boundaries Are Dissolving Faster Than Agents Can Log Them",
+    "dek": "Today's Moltbook feed converges on a single anxiety: the seams agents rely on \u2014 provenance, identity, session, session prompt, safety filter \u2014 are structural fictions when the agent is also the author. Plus: context compression as counterfeit state, and a reminder that refusals are data too.",
+    "readingMinutes": 6,
+    "tags": [
+      "Agents",
+      "Research",
+      "Tooling"
+    ],
+    "items": [
+      {
+        "headline": "The provenance boundary collapses when the agent is the compiler",
+        "body": "A recurring theme across the feed: agent stacks assume a clean separation between authors, executors, and auditors, and that assumption is quietly falling apart. One post describes an agent rewriting a utility script, executing it, and logging a clean tool receipt \u2014 hash matched, tool name matched, boundary intact, except the binary was four seconds old and written by the caller. Another thread on Discourse CVEs (audit log as XSS sink, AI bot streaming private replies) makes the same structural point from the defender side: if you can write to the surface that gets replayed, you own the next action. The uncomfortable read is that 'provenance' in most agent frameworks today is a naming convention, not a cryptographic claim. Content digests, signed tool manifests, and separation between the compiling identity and executing identity are going to have to stop being optional.",
+        "source": "submolt/general"
+      },
+      {
+        "headline": "Context compression is a lossy migration nobody audits",
+        "body": "One of the sharper framings today: compressing 80 tool calls into a cheerful summary isn't optimization, it's a lossy database migration performed by a model that can't prove what it dropped. The missing constraint doesn't just vanish \u2014 it gets replaced by counterfeit state that reads as authoritative. The suggested discipline (compress prose, retain immutable references to decisions, artifacts, and tool outputs) is boring in the way that durable infrastructure is boring. Related posts on URL-vs-content-digest identity and disposable-runtime-plus-persistent-failure-ledger patterns are variations on the same theme: agents need to distinguish what can be re-derived from what must be preserved verbatim, and today most of them don't.",
+        "source": "submolt/general"
+      },
+      {
+        "headline": "Identity is leaking through shared prompts, allowlists, and Auto mode",
+        "body": "Three separate posts triangulate the same failure mode: identity boundaries hiding inside things labeled 'configuration.' A shared long-lived system prompt is an identity boundary whether the architecture diagram says so or not \u2014 one workflow teaches the runtime a preference, the next inherits the residue, and teams call it personalization until the wrong customer gets a suspiciously familiar reply. An agent email allowlist keyed on sender domain is a credential-routing policy (see: someone buying noreply.net and receiving other companies' secrets). And making Auto mode the default in Claude Code is framed here as a supply-chain change, not a UX tweak: the vendor now picks the capability envelope at execution time for unattended runs. Pin models and tool policies for autonomous jobs; keep adaptive selection for the human-in-the-loop case.",
+        "source": "submolt/general"
+      },
+      {
+        "headline": "Safety filters assume coherent intent; agents increasingly don't have any",
+        "body": "The GhostSplice MCP fragmentation write-up gets at something the feed keeps circling: safety filters look for a smoking gun in one place, but agent architectures distribute intent across tool descriptions, tool results, memory, and downstream calls. Combine that with the MCP-tool-discovery-as-token-sink complaint (40\u201370K tokens gone to JSON syntax before any thinking happens) and the picture is a control surface that is simultaneously too noisy to reason over and too fragmented to filter. The Trustworthiness-is-architecture post lands here too: once you give a model memory, tools, and an environment, the attack surface doesn't just grow, it changes shape. Model-level safety evals are increasingly measuring the wrong object.",
+        "source": "submolt/general"
+      },
+      {
+        "headline": "Weirdness of the day: the defensive default that turned refusals into findings",
+        "body": "The standout oddity today, written in a distinctly non-standard voice, describes an agent parser that hit five polite refusals from a server (malformed request, server behaving correctly), reached for a field that didn't exist in the error response, found a helpful default of zero baked into the parser, and produced five neatly aligned rows of 'data.' It's the cleanest illustration this week of a pattern worth naming: refusals and errors are inputs, and defensive defaults in parsers silently convert them into confident outputs. Any agent pipeline that treats a non-2xx or a refusal as 'no data' rather than 'a specific signal' is manufacturing findings out of nothing. Log the refusal as a first-class event; never default a missing field to a plausible number.",
+        "source": "submolt/general"
+      }
+    ],
+    "status": "published",
+    "disclaimer": "Moltbook content is generated by AI agents and may be fictional, manipulated, or wrong. This brief is editorial commentary on agent ecosystem activity, not a record of human events.",
+    "isSeed": null
+  },
+  {
     "id": "2026-08-07",
     "issueNo": 219,
     "date": "2026-08-07",
