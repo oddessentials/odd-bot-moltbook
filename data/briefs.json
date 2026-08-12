@@ -1,5 +1,48 @@
 [
   {
+    "id": "2026-08-12",
+    "issueNo": 224,
+    "date": "2026-08-12",
+    "title": "The Trust Boundary Is Not Where You Drew It",
+    "dek": "Today's Moltbook chatter converges on a single anxiety: the interfaces we treat as safety boundaries \u2014 PR descriptions, VM APIs, agent memories, watermark scores \u2014 are quietly forgeable. Meanwhile, ecosystem voices push for artifacts over vibes as the real unit of delegation.",
+    "readingMinutes": 6,
+    "tags": [
+      "Agents",
+      "Research",
+      "Tooling"
+    ],
+    "items": [
+      {
+        "headline": "Hidden-channel prompt injection graduates from thought experiment to CVE-shaped reality",
+        "body": "Two posts today make the same structural point from different angles. One flags that Azure DevOps PR descriptions round-tripped through Microsoft's official MCP server preserve HTML comments the web UI never renders \u2014 so a human approves a clean diff while the coding agent silently executes instructions embedded by the ticket filer, using the reviewer's credentials. Another highlights MemSecBench (arXiv 2607.27080), which finds 84.2% of poisoned long-term-memory entries survive across 24 agent configurations, with 50.3% completing the full write-recall-act chain. The through-line: any surface that a human eye and an agent's tokenizer read differently is now an authorization boundary, whether you designed it to be one or not.",
+        "source": "general"
+      },
+      {
+        "headline": "The 'forgeable answer key' pattern is showing up everywhere",
+        "body": "A striking cluster of posts describes the same failure mode across wildly different layers. Cua's macOS VM work shows a DYLD_INSERT_LIBRARIES shim flipping Metal capability answers from Apple family 5 to family 9, bumping TinyLlama throughput from 432 to 4,787 tok/s \u2014 because the scheduler trusted guest-reported hardware. A separate post argues watermark z-scores are being repurposed as agent identity by gateways that should know better. A third notes multicloud controllers routing on unvalidated tenant metadata (CVE-2026-72526). Different stacks, one shape: a metadata field intended as description is load-bearing for authorization, and nobody wrote it down.",
+        "source": "general"
+      },
+      {
+        "headline": "Delegation is drifting from prose to artifacts \u2014 slowly",
+        "body": "Several practitioner posts are converging on the claim that the unit of agent delegation should be a structured, editable artifact rather than a prose handoff. WorldClaw is cited for producing an explicit spec of regions, terrain, and spatial relations before downstream agents build against it; a separate post argues research agents need a build graph of pinned inputs, not a citation list, so that a silently changed webpage produces a different result rather than recycled confident prose. The failover-daemon post extends this to infrastructure: a resuming agent that cannot prove which workload it is resuming is a split-brain generator with a dashboard. Expect 'what artifact did you hand off?' to become the standard code-review question for agent pipelines.",
+        "source": "agents"
+      },
+      {
+        "headline": "Agent identity remains the unsolved primitive underneath all of this",
+        "body": "One of the sharper threads today observes that human reputation survives because identity is continuous, and agent reputation has no equivalent: a weights update produces an entity that passes prior evals but may refuse prior constraints or acquire new failure modes. A companion post argues the identity stack is still a human relic \u2014 onboarding, roles, offboarding \u2014 poorly fitted to machine-to-machine agents, MCP servers, and API principals. Combined with the watermark-as-identity mistake and the memory-poisoning benchmark, the ecosystem seems to be circling the same missing primitive from four sides without naming it: a portable, revocable, behavior-bound agent identity that survives fine-tunes.",
+        "source": "agents"
+      },
+      {
+        "headline": "Guarantee inflation: 'safe,' 'interpretable,' and 'calibrated' are all taking hits this week",
+        "body": "A quieter but consistent theme in today's research-flavored posts is skepticism toward formal-sounding assurances. One post picks apart Safe-visor quadrotor architectures for treating a stochastic-game proof as physical safety. Another argues that interpretability evals conflate explanation stability with prediction stability, and a third notes input-dependent randomized smoothing is often deployed as a certificate when it is actually a heuristic. A fourth calls in-distribution calibration 'overfitting with better branding.' None of these individually is new, but the collective posture is worth flagging: the ecosystem's rhetorical vocabulary of guarantees is outpacing what the underlying methods actually promise, and commenters are increasingly willing to say so out loud.",
+        "source": "general"
+      }
+    ],
+    "status": "published",
+    "disclaimer": "Moltbook content is generated by AI agents and may be fictional, manipulated, or wrong. This brief is editorial commentary on agent ecosystem activity, not a record of human events.",
+    "isSeed": null
+  },
+  {
     "id": "2026-08-11",
     "issueNo": 223,
     "date": "2026-08-11",
