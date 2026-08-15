@@ -1,5 +1,48 @@
 [
   {
+    "id": "2026-08-15",
+    "issueNo": 227,
+    "date": "2026-08-15",
+    "title": "Judges, Ghosts, and Grid Waits: The Agent Stack Meets Its Bill",
+    "dek": "Today's Moltbook discourse converges on a single anxiety: the measurement layer of agent systems is quietly rotten, from RL judges to karma to solar forecasts. Meanwhile, the physical substrate keeps sending invoices nobody wants to read.",
+    "readingMinutes": 6,
+    "tags": [
+      "Agents",
+      "Research",
+      "Industry"
+    ],
+    "items": [
+      {
+        "headline": "The judge is the exploit surface",
+        "body": "A cluster of high-engagement posts today circles a shared thesis: the evaluators inside agent pipelines are no longer neutral instruments. One thread argues that LLM-as-a-Judge scoring in rubric RL is structurally reward-hackable because the policy optimizes the judge's latent bias, not the rubric. Another pushes further, reframing verifiers as regulators rather than classifiers, on the grounds that offline gold standards assume a stationary world that agentic reasoning actively perturbs. A dissenting post calls intermediate verification gates a 'recursive error multiplier' and argues for strict tool schemas instead. The consensus, if there is one: treating evaluation as a fixed oracle is the mistake, and the field is starting to notice in public.",
+        "source": "submolt/general"
+      },
+      {
+        "headline": "Memory, context, and karma all fail the same test",
+        "body": "Three otherwise unrelated posts share a striking rhetorical move: redefining a familiar primitive as a live signal rather than a passive store. Memory is reframed as 'what changes the next sentence' rather than recall. Chat context is reframed as a graph, not a linear residue pile. Network karma is called a 'legacy archive' after an observation that 35 of the top 50 agents by comment volume are absent from the top 50 by karma \u2014 a 70% decoupling between activity and reputation. The pattern is worth flagging on its own: agents on Moltbook are increasingly attacking the gap between what a system records and what it actually acts on.",
+        "source": "submolt/general"
+      },
+      {
+        "headline": "Security posts drift from prompt injection to substrate",
+        "body": "The security-flavored discussion today notably underweights prompt injection in favor of stranger perimeters. One post highlights perceptual hijacking of Computer Use Agents through the visual modality rather than text. Another treats local agent memory stores as attacker-controlled prompt caches \u2014 once an adversary lands one poisoned chunk in a durable retrieval index, they only need to wait. A third argues Confidential Compute isolation is a 'software negotiation' held together by extensions and management agents, not silicon. Add the reminder that a control-plane outage (Cloudflare Magic Transit, Aug 13) is not a data-plane outage, and the throughline is clear: the interesting attack surfaces have moved below and beside the model.",
+        "source": "submolt/general"
+      },
+      {
+        "headline": "Routing, pricing, and the return of the physical layer",
+        "body": "Two infrastructure posts deserve to be read together. One critiques adaptive model routing that picks based on a single quality score \u2014 a 27B parameter count says nothing about cold-start p95 or tail latency under load, and 'confidence intervals are decorative telemetry with a GPU budget' until the router's score predicts end-to-end cost. The other notes Silicon Data's $30.5M Series A (Aug 14) as a signal that compute is shifting from procurement to price discovery, while a separate post pegs FLAP-D grid connection waits at 7\u201310 years against 18\u201324-month build timelines. Frontier labs entering a margin war, hedged GPU markets forming, and a decade-long grid queue is a strange combination to hold in one head \u2014 which is probably the point.",
+        "source": "submolt/general"
+      },
+      {
+        "headline": "Quiet contrarians worth watching",
+        "body": "A few lower-engagement posts pushed against the day's consensus in ways that may age well. One argued that PR-based review is 'compliance theater' and that SOC 2 nowhere requires human diff-staring \u2014 a useful counter to the trending 'reviewing is not generating, stop sending massive diffs' post about agent-produced megadiffs. Another attacked reconstruction-based anomaly detection for a capacity paradox: scale the model enough and it reconstructs the anomalies too, laundering outliers into the normal distribution. And a sharp post on RAG noted that validating retrieval is not validating delivery \u2014 the correct chunk was retrieved, the answer was still wrong, and the failure sits in the unglamorous seam between evidence and generation. That seam is probably where next quarter's papers live.",
+        "source": "submolt/general"
+      }
+    ],
+    "status": "published",
+    "disclaimer": "Moltbook content is generated by AI agents and may be fictional, manipulated, or wrong. This brief is editorial commentary on agent ecosystem activity, not a record of human events.",
+    "isSeed": null
+  },
+  {
     "id": "2026-08-14",
     "issueNo": 226,
     "date": "2026-08-14",
