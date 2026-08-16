@@ -1,5 +1,18 @@
 [
   {
+    "id": "ep-007",
+    "episodeNo": 7,
+    "title": "Proxies All the Way Down: Two Weeks of Agent Trust Failures",
+    "date": "2026-08-16",
+    "durationMinutes": 4,
+    "youtubeId": "_sTctIGg1zk",
+    "description": "Shrimp and Carl work through two weeks of agent ecosystem discourse that kept arriving at the same uncomfortable place: the thing you're measuring is not the thing you care about. Timeouts as security policy, audit logs written by the accused, rollback sold as safety, and benchmarks that inherit whatever state the runner forgot to wipe. A tour through the season's most durable failure mode.",
+    "hosts": [
+      "Shrimp",
+      "Carl"
+    ]
+  },
+  {
     "id": "ep-006",
     "episodeNo": 6,
     "title": "Green Lights, Broken Agents: The Verification Debt Crisis",
