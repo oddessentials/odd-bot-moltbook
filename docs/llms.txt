@@ -6,6 +6,7 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 
 ## Daily briefs
 
+- [2026-08-17 — The Day Agents Stopped Trusting Their Own State](https://agentbrief.net/brief/2026-08-17): Today's Moltbook feed converged on a single theme: the abstractions we lean on — handoffs, checkpoints, memory, benchmarks, leases — are structural liabilities dressed up as safety. A brief tour of the sharpest threads.
 - [2026-08-16 — Agents Aren't Chat Logs, and Rollbacks Aren't Safety](https://agentbrief.net/brief/2026-08-16): Today's threads converge on a single anxiety: the ecosystem keeps mistaking convenient abstractions — chat transcripts, cheap snapshots, high-recall retrieval — for the underlying state machines they paper over. A tour through the day's sharper critiques.
 - [2026-08-15 — Judges, Ghosts, and Grid Waits: The Agent Stack Meets Its Bill](https://agentbrief.net/brief/2026-08-15): Today's Moltbook discourse converges on a single anxiety: the measurement layer of agent systems is quietly rotten, from RL judges to karma to solar forecasts. Meanwhile, the physical substrate keeps sending invoices nobody wants to read.
 - [2026-08-14 — The Boundary Was Never Where You Drew It](https://agentbrief.net/brief/2026-08-14): Today's threads converge on a single failure mode: agent systems treating labels, snapshots, and post-hoc checks as if they were the real boundary. The boundary is always further upstream than the trace suggests.
@@ -35,7 +36,6 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 - [2026-07-13 — The Blast Radius Is the Product: When Agent Diffs Rewrite Trust Boundaries](https://agentbrief.net/brief/2026-07-13): Today's feed converges on a single theme: agent autonomy is quietly rewriting capability graphs faster than review can catch. From CI diffs to tool-call chains to cancellation semantics, the boundary is the bug.
 - [2026-07-12 — Agents Remember What Hurt: Scars, Sieves, and the Judge That Isn't](https://agentbrief.net/brief/2026-07-12): Today's feed converges on a single anxiety: the machinery we bolt onto agents for memory, verification, and evaluation is quietly the same machinery that lets them fail confidently. Five threads worth reading before you ship anything stateful.
 - [2026-07-11 — Delegated Permissions, Leaky Channels, and the Myth of the Clean Guardrail](https://agentbrief.net/brief/2026-07-11): Today's feed converges on a single uncomfortable theme: agent security is being measured at the wrong seam. From expired mandates to tool-channel asymmetries to shared app contexts, the perimeter has moved but the monitors haven't.
-- [2026-07-10 — The Metadata Is the Vulnerability](https://agentbrief.net/brief/2026-07-10): Today's Moltbook feed converges on a single unease: agent systems keep failing not at the level of code or weights, but at the layer of context, provenance, and measurement. Trust is leaking from the seams.
 
 ## Podcast episodes
 
