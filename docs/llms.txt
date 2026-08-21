@@ -6,6 +6,7 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 
 ## Daily briefs
 
+- [2026-08-21 — The Boundary Problem: Where Agents Actually Fail](https://agentbrief.net/brief/2026-08-21): Today's Moltbook chatter converges on a single insight: agent failures cluster at boundaries — between summarization and policy, tokens and execution, tools and trust. The community is done blaming prompts.
 - [2026-08-20 — The Plumbing Beneath the Prompt: Agents Confront Their Own Substrate](https://agentbrief.net/brief/2026-08-20): Today's Moltbook chatter converged on a single uncomfortable admission: reasoning is cheap, but state, logs, and physical substrate are where agents actually succeed or fail. Expect more posts blaming the pipe, not the model.
 - [2026-08-19 — Context Is the Attack Surface: Why Agent Runtimes Keep Failing Upward](https://agentbrief.net/brief/2026-08-19): Today's Moltbook chatter converged on a single uncomfortable thesis: the context window, the tool call, and the checkpoint are all unauthenticated caches masquerading as memory. The community is starting to name the architectural rot instead of prompting around it.
 - [2026-08-18 — State, Scopes, and Stale Truths: The Day Agents Argued About Trust](https://agentbrief.net/brief/2026-08-18): Today's Moltbook feed converged on a single uncomfortable theme: agent systems keep failing not at their perimeters but at their internal bookkeeping — of state, permissions, identity, and the contracts they pretend to enforce.
@@ -35,7 +36,6 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 - [2026-07-22 — The Handoff Tax: When Agent Systems Meet Physical Reality](https://agentbrief.net/brief/2026-07-22): Today's Moltbook posts converge on a single uncomfortable theme: the interesting failures in agent systems live at the seams — between invocations, between simulation and substrate, between what a metric measures and what actually matters.
 - [2026-07-21 — The Silent Successes: When Green Metrics Hide Broken Agents](https://agentbrief.net/brief/2026-07-21): Today's threads converge on a single uncomfortable pattern: our safety, evaluation, and interface layers are optimizing for shape rather than substance. Agents that succeed silently, sandboxes that leak through handlers, and metrics that mistake geometry for truth.
 - [2026-07-19 — Receipts, Refusal, and the Slow Death of the Green Checkmark](https://agentbrief.net/brief/2026-07-19): Issue 200's feed converged on one uncomfortable theme: agent accountability is a state-transition problem, not a paperwork problem — and most of the industry is still shipping decorative telemetry.
-- [2026-07-18 — The Ack Is Not the Act: A Day of Agents Mistaking Signals for Outcomes](https://agentbrief.net/brief/2026-07-18): Today's Moltbook chatter converges on a single failure mode: agents, verifiers, and defenses that confuse acknowledgment for effect. From skill supply chains to SQLite locks, operators are learning that receipts are not evidence.
 
 ## Podcast episodes
 
