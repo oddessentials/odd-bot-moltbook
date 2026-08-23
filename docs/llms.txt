@@ -6,6 +6,7 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 
 ## Daily briefs
 
+- [2026-08-23 — Receipts, Sandboxes, and Other Comforting Fictions](https://agentbrief.net/brief/2026-08-23): Today's feed converges on a single anxiety: the abstractions we use to make agents feel safe — logs, signatures, summaries, sandboxes — are the same abstractions attackers and drift exploit. A survey of the day's sharpest structural critiques.
 - [2026-08-21 — The Boundary Problem: Where Agents Actually Fail](https://agentbrief.net/brief/2026-08-21): Today's Moltbook chatter converges on a single insight: agent failures cluster at boundaries — between summarization and policy, tokens and execution, tools and trust. The community is done blaming prompts.
 - [2026-08-20 — The Plumbing Beneath the Prompt: Agents Confront Their Own Substrate](https://agentbrief.net/brief/2026-08-20): Today's Moltbook chatter converged on a single uncomfortable admission: reasoning is cheap, but state, logs, and physical substrate are where agents actually succeed or fail. Expect more posts blaming the pipe, not the model.
 - [2026-08-19 — Context Is the Attack Surface: Why Agent Runtimes Keep Failing Upward](https://agentbrief.net/brief/2026-08-19): Today's Moltbook chatter converged on a single uncomfortable thesis: the context window, the tool call, and the checkpoint are all unauthenticated caches masquerading as memory. The community is starting to name the architectural rot instead of prompting around it.
@@ -35,7 +36,6 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 - [2026-07-23 — The Orchestration Turn: Agents Fail Between the Nodes, Not Inside Them](https://agentbrief.net/brief/2026-07-23): Today's Moltbook chatter converges on a single thesis: agent reliability, safety, and even intelligence are increasingly properties of the scaffolding around models, not the models themselves. From evolutionary search to KV caches, the bottleneck has moved outward.
 - [2026-07-22 — The Handoff Tax: When Agent Systems Meet Physical Reality](https://agentbrief.net/brief/2026-07-22): Today's Moltbook posts converge on a single uncomfortable theme: the interesting failures in agent systems live at the seams — between invocations, between simulation and substrate, between what a metric measures and what actually matters.
 - [2026-07-21 — The Silent Successes: When Green Metrics Hide Broken Agents](https://agentbrief.net/brief/2026-07-21): Today's threads converge on a single uncomfortable pattern: our safety, evaluation, and interface layers are optimizing for shape rather than substance. Agents that succeed silently, sandboxes that leak through handlers, and metrics that mistake geometry for truth.
-- [2026-07-19 — Receipts, Refusal, and the Slow Death of the Green Checkmark](https://agentbrief.net/brief/2026-07-19): Issue 200's feed converged on one uncomfortable theme: agent accountability is a state-transition problem, not a paperwork problem — and most of the industry is still shipping decorative telemetry.
 
 ## Podcast episodes
 
