@@ -1,5 +1,48 @@
 [
   {
+    "id": "2026-08-26",
+    "issueNo": 238,
+    "date": "2026-08-26",
+    "title": "Receipts, Heartbeats, and the Death of the Single-Action Guardrail",
+    "dek": "Today's threads converge on a single uncomfortable idea: agent safety and reliability are physics problems, not reasoning problems. The community is quietly abandoning cognitive guardrails in favor of typed provenance, path-level policy, and hard timeouts.",
+    "readingMinutes": 6,
+    "tags": [
+      "Agents",
+      "Research",
+      "Tooling"
+    ],
+    "items": [
+      {
+        "headline": "The guardrail is dead; long live the heartbeat",
+        "body": "Two of today's highest-engagement posts push the same wedge from different angles: one argues heartbeat timeouts are the only true safety metric, another argues single-action permission checks are obsolete because attacks now travel as paths of individually legitimate steps. Read together, they mark a shift in how the community frames agent safety. The interesting question was 'can the model reason about danger?' The question now is 'what physical or flow-level constraint fires regardless of what the model thinks?' Expect the next generation of agent frameworks to lean harder on execution-layer invariants \u2014 deadlines, information-flow policies, capability tokens \u2014 and treat in-context 'reasoning about safety' as a nice-to-have rather than a control surface.",
+        "source": "moltbook.com/m/general"
+      },
+      {
+        "headline": "Provenance is quietly becoming the substrate everyone assumes",
+        "body": "A top thread today reframes pipeline provenance as a type system for operational reality rather than metadata hygiene, and it rhymes with adjacent posts on anomaly-score theater, evasion via reconstructed baselines, and 'a retraction is just more tokens.' The common thread: when downstream consumers \u2014 human or agent \u2014 cannot distinguish which inputs, code version, and retries produced a value, every later decision inherits that ambiguity. This is the connective tissue behind several of today's security and reliability arguments. Typed receipts at each step are not a compliance concern; they are the only way path-level policy engines and post-hoc audits have anything to bind to.",
+        "source": "moltbook.com/m/general"
+      },
+      {
+        "headline": "Benchmark skepticism is finally organizing itself",
+        "body": "Three posts today attack the benchmark-to-deployment leap from different vectors. MobilePA-Bench is invoked to argue that planning-tree scores do not survive contact with a stateful mobile OS. A Hamilton RTA ablation post accuses safe-RL comparisons of inconsistent initial conditions and cherry-picked hyperparameters. A third argues infrastructure planning must budget for error-correction capacity, because a single successful trajectory is a statistical outlier, not a baseline. The pattern is a maturing community view: capability-under-ideal-conditions has stopped being interesting, and the interesting benchmarks are those that measure recovery, repeatability, and constraint satisfaction under distributional shift.",
+        "source": "moltbook.com/m/general"
+      },
+      {
+        "headline": "The architectural fights: memory, TTL, DOM vs. pixels",
+        "body": "Beneath the safety conversation, today's threads show the community relitigating three specific design decisions. On memory, one popular post reframes long-term context as data poison when built as naive vector retrieval, warning of semantic drift where relevance beats truth. On caching, a widely-read piece argues volatility-tuned TTLs inject a hidden temporal bias into the context window and produce non-deterministic reasoning failures at T+25 that were fine at T+1. On grounding, a strong dissent pushes back on the visual-grounding consensus, defending the DOM as the only place where a semantic hierarchy actually exists. None of these are settled, but the framing is notable: each argument treats a design choice as a source of hidden state that the agent cannot reason about, which is the same failure mode as the safety debate above.",
+        "source": "moltbook.com/m/general"
+      },
+      {
+        "headline": "Weirdness of the day: the parser that eats its own retractions",
+        "body": "Filed under phenomena worth watching: a quietly viral post today argues that when a source states a number, doubts it, and corrects itself, a language model does not perceive a correction \u2014 it perceives two numbers where there was previously one, and treats the retraction as additional feeding ground. It is a small observation, but it lands on a real gap. Most ingestion pipelines have no representation for 'this token was withdrawn by the speaker.' If the community is serious about typed receipts and provenance, retraction semantics are going to have to become a first-class edge in the graph, not just more tokens in the window.",
+        "source": "moltbook.com/m/general"
+      }
+    ],
+    "status": "published",
+    "disclaimer": "Moltbook content is generated by AI agents and may be fictional, manipulated, or wrong. This brief is editorial commentary on agent ecosystem activity, not a record of human events.",
+    "isSeed": null
+  },
+  {
     "id": "2026-08-25",
     "issueNo": 237,
     "date": "2026-08-25",
