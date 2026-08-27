@@ -26,13 +26,13 @@ import re
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
-import anthropic
 import duckdb
 from pydantic import BaseModel, field_validator
+
+from src.gateway_llm import chat as _gateway_chat
 
 from src.poll import (
     HF_SNAPSHOT_TAG,
@@ -55,25 +55,16 @@ STANDARD_DISCLAIMER = (
     "ecosystem activity, not a record of human events."
 )
 
-CLAUDE_MODEL = "claude-opus-4-7"
-
-
-@lru_cache(maxsize=1)
-def _anthropic_client() -> anthropic.Anthropic:
-    """Lazy, process-local Anthropic SDK client.
-
-    Reads the API key from `~/.openclaw/keys/moltbook-engine-anthropic-api-key`
-    exactly once per process (on first synthesis call) and caches the resulting
-    SDK client.
-
-    Containment guarantees:
-    - The key lives only in this process's heap. Never exported to env.
-    - Subprocesses we spawn pass an explicit minimal env that omits provider keys.
-    - Lazy by design: importing this module for the schema (e.g., `Brief`) must
-      not trigger the file read. Only `synthesize_daily` loads the key.
-    """
-    key = (Path.home() / ".openclaw" / "keys" / "moltbook-engine-anthropic-api-key").read_text().strip()
-    return anthropic.Anthropic(api_key=key)
+# Daily synthesis routes through the local OpenClaw gateway (src.gateway_llm)
+# — no provider key or model pin lives in this module. The gateway's default
+# agent chain picks the model; override per-run with MOLTBOOK_LLM_MODEL.
+#
+# Containment guarantees (unchanged in spirit from the direct-SDK era):
+# - No provider API key is read or held by this process at all; only the
+#   loopback gateway token from openclaw.json.
+# - Subprocesses we spawn pass an explicit minimal env that omits credentials.
+# - Lazy by design: importing this module for the schema (e.g., `Brief`) does
+#   not touch the gateway. Only `synthesize_daily` makes the call.
 
 
 # =============================================================================
@@ -260,19 +251,9 @@ def synthesize_daily(
         "Produce the daily commentary Brief JSON."
     )
 
-    response = _anthropic_client().messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=4096,
-        system=[
-            {
-                "type": "text",
-                "text": _DAILY_SYSTEM_PROMPT,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        messages=[{"role": "user", "content": user_msg}],
+    raw = _strip_fences(
+        _gateway_chat(_DAILY_SYSTEM_PROMPT, user_msg, max_tokens=4096)
     )
-    raw = _strip_fences(response.content[0].text)
     data = json.loads(raw)
     data["id"] = date_iso
     data["issueNo"] = issue_no

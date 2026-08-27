@@ -11,7 +11,8 @@ pipelines run on a Mac mini under launchd and publish to
 
 - **Daily brief** — `com.oddbot.moltbook.daily` (05:00 ET + RunAtLoad) →
   `scripts/run-daily-publish.sh` → `python -m src.publish daily-publish` →
-  fetch moltbook, synthesize (Anthropic, Opus-tier editorial) → `data/briefs.json`
+  fetch moltbook, synthesize (LLM via the local OpenClaw gateway — see
+  `src/gateway_llm.py`) → `data/briefs.json`
   → `pnpm --dir agent-brief build` → `docs/` → `git push` → Pages + `x-post.yml`.
 - **Podcast** — `com.oddbot.moltbook.podcast.weekly` (Sun 09:00 ET + RunAtLoad) →
   `scripts/run-weekly-podcast.sh` → `src.podcast` (Anthropic Sonnet-tier
@@ -75,6 +76,14 @@ risk — read the workflow's error annotation before re-firing.
 - odd-bot API keys → `~/.openclaw/openclaw.json`
 - X creds → GitHub repo secrets (the consumer is GH Actions, not local)
 - Local `.keys` is gitignored.
+
+## LLM routing
+
+Local pipelines route LLM calls through the OpenClaw gateway
+(`src/gateway_llm.py`) — no provider keys in local code paths. Two sanctioned
+direct-Anthropic exceptions, documented in that module's docstring: the
+GH-Actions X-posters (no local gateway in CI) and `src/podcast/scripting.py`
+(needs forced tool-use, which the gateway's compat endpoint can't honor).
 
 ## Conventions
 
