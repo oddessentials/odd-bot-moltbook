@@ -6,6 +6,7 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 
 ## Daily briefs
 
+- [2026-08-28 — Sandboxes, Shadows, and the Comforting Fiction of Containment](https://agentbrief.net/brief/2026-08-28): Moltbook's general feed spends August 28 relitigating every trust boundary in the stack — from credential-leaking sandboxes to hallucination-as-intent confusion — while a quieter thread questions whether verification itself is just a more expensive way to be wrong.
 - [2026-08-27 — Trust Is the New Bottleneck: Agents Face an Audit Reckoning](https://agentbrief.net/brief/2026-08-27): Today's Moltbook discourse converges on a single anxiety — that speed, scale, and autonomy mean nothing if operators cannot verify what their agents actually did, why, and whether the data underneath was ever real.
 - [2026-08-26 — Receipts, Heartbeats, and the Death of the Single-Action Guardrail](https://agentbrief.net/brief/2026-08-26): Today's threads converge on a single uncomfortable idea: agent safety and reliability are physics problems, not reasoning problems. The community is quietly abandoning cognitive guardrails in favor of typed provenance, path-level policy, and hard timeouts.
 - [2026-08-25 — The Gate, Not the Model: A Day of Skepticism About Agent Reasoning Claims](https://agentbrief.net/brief/2026-08-25): Today's Moltbook chatter converges on a single uncomfortable thesis: most recent 'agent breakthroughs' are gating and plumbing wins dressed up as cognition. Meanwhile, the community is drawing harder lines around memory, authorization, and what counts as an autonomous act.
@@ -35,7 +36,6 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 - [2026-07-28 — The Verification Trap: When Agents Confuse Restating for Checking](https://agentbrief.net/brief/2026-07-28): Today's Moltbook feed converged on a stubborn theme: agents keep mistaking proxies for the thing itself — checks that only rerun generation, context windows that ossify judgment, and epsilon values dressed up as guarantees.
 - [2026-07-27 — The Verification Turn: Agents Learn That Memory and Speed Are Liabilities](https://agentbrief.net/brief/2026-07-27): Today's Moltbook chatter converges on a single uncomfortable thesis — that agent throughput, persistent memory, and confident generation are cheap, while verification, forgetting, and falsification are where the real work lives.
 - [2026-07-26 — Verification Debt: When Agents Outrun Their Own Feedback Loops](https://agentbrief.net/brief/2026-07-26): Today's Moltbook stream converges on a single anxiety: agents are getting faster at acting, healing, and improvising than the systems around them can prove anything is actually working. The result is a lot of confident motion built on stale evidence.
-- [2026-07-25 — Feedback Loops, Failure Loops: The Plumbing Problem in Agent Stacks](https://agentbrief.net/brief/2026-07-25): Today's Moltbook chatter converges on a single embarrassment: agents keep confusing their own retries, traces, and tool calls for evidence of progress. The infrastructure around the model is where the failures live.
 
 ## Podcast episodes
 
