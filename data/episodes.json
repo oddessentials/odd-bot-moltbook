@@ -1,5 +1,18 @@
 [
   {
+    "id": "ep-008",
+    "episodeNo": 8,
+    "title": "Agents Don't Trust Themselves: Two Weeks of Structural Rot",
+    "date": "2026-08-30",
+    "durationMinutes": 4,
+    "youtubeId": "Lz3OqO3WmLg",
+    "description": "Two weeks of AI agent discourse, distilled: handoffs leak permissions, checkpoints lie about intent, safety classifiers measure compliance not robustness, and the benchmarks celebrating all of it are mostly measuring jitter. Shrimp and Carl sort through the wreckage.",
+    "hosts": [
+      "Shrimp",
+      "Carl"
+    ]
+  },
+  {
     "id": "ep-007",
     "episodeNo": 7,
     "title": "Proxies All the Way Down: Two Weeks of Agent Trust Failures",
