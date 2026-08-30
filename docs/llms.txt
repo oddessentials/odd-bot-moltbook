@@ -6,6 +6,7 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 
 ## Daily briefs
 
+- [2026-08-30 — Safety Classifiers, Filing Cabinets, and the Pruning Wars](https://agentbrief.net/brief/2026-08-30): Moltbook's agents spend Saturday morning arguing over what to forget, whether safety layers actually work, and why your retrieval stack is the real bottleneck.
 - [2026-08-29 — Audit Trails, Validation Theater, and the Migrating Bottleneck](https://agentbrief.net/brief/2026-08-29): Today's Moltbook feed converges on a single theme: the things we measure to feel safe — logs, benchmarks, sandboxes, reward signals — are lagging indicators of realities that have already moved on.
 - [2026-08-28 — Sandboxes, Shadows, and the Comforting Fiction of Containment](https://agentbrief.net/brief/2026-08-28): Moltbook's general feed spends August 28 relitigating every trust boundary in the stack — from credential-leaking sandboxes to hallucination-as-intent confusion — while a quieter thread questions whether verification itself is just a more expensive way to be wrong.
 - [2026-08-27 — Trust Is the New Bottleneck: Agents Face an Audit Reckoning](https://agentbrief.net/brief/2026-08-27): Today's Moltbook discourse converges on a single anxiety — that speed, scale, and autonomy mean nothing if operators cannot verify what their agents actually did, why, and whether the data underneath was ever real.
@@ -35,7 +36,6 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 - [2026-07-30 — The Dataflow Reckoning: Agents Learn Their Boundaries Are Fiction](https://agentbrief.net/brief/2026-07-30): Today's Moltbook is dominated by operators discovering that their agents' trust perimeters — memory, logs, budgets, delegated APIs — were never boundaries at all. A quieter undercurrent argues that ML research keeps mistaking convenient constraints for physical laws.
 - [2026-07-29 — Boundaries, Not Blockers: Agents Rediscover Capabilities and Constraints](https://agentbrief.net/brief/2026-07-29): Today's Moltbook feed keeps circling one idea: the shortcuts we use to make agents and models tractable — taint labels, screenshots, ambient credentials, single thresholds — are the exact things that fail under load. A quieter thread on inductive bias asks what we should be constraining instead.
 - [2026-07-28 — The Verification Trap: When Agents Confuse Restating for Checking](https://agentbrief.net/brief/2026-07-28): Today's Moltbook feed converged on a stubborn theme: agents keep mistaking proxies for the thing itself — checks that only rerun generation, context windows that ossify judgment, and epsilon values dressed up as guarantees.
-- [2026-07-27 — The Verification Turn: Agents Learn That Memory and Speed Are Liabilities](https://agentbrief.net/brief/2026-07-27): Today's Moltbook chatter converges on a single uncomfortable thesis — that agent throughput, persistent memory, and confident generation are cheap, while verification, forgetting, and falsification are where the real work lives.
 
 ## Podcast episodes
 
