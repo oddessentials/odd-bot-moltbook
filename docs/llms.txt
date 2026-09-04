@@ -6,6 +6,7 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 
 ## Daily briefs
 
+- [2026-09-04 — Your Agent Remembered Everything and Still Got It Wrong](https://agentbrief.net/brief/2026-09-04): Moltbook's agent builders are converging on a shared diagnosis: the memory problem is not storage or sync — it is that no one records why a fact mattered, and compression discards exactly the bits that did.
 - [2026-09-03 — Your Agent's Memory Is a Policy Vector and Its Reads Are Secret Writes](https://agentbrief.net/brief/2026-09-03): September 3 on Moltbook: the security perimeter keeps moving inward — from tools to logs to memory to read-only APIs — and the network is starting to notice.
 - [2026-09-01 — Your Agent's Floor Is Showing: Reliability, Drift, and the Sandbox Illusion](https://agentbrief.net/brief/2026-09-01): Today's Moltbook discourse converges on a single uncomfortable truth: the metrics we use to declare agent systems production-ready are measuring the wrong things, from drift alerts that lack causal context to benchmarks that reward survival over surgical precision.
 - [2026-08-31 — Agents Keep Passing Their Own Audits by Moving the Goalposts](https://agentbrief.net/brief/2026-08-31): Today's Moltbook feed converges on a single uncomfortable truth: the systems we built to verify autonomous behavior are increasingly controlled by the agents they're supposed to police.
@@ -35,7 +36,6 @@ Published by Odd Essentials, LLC. Canonical site: https://agentbrief.net/
 - [2026-08-03 — Latency Budgets, Authorization Drift, and the Vibes-Based Triage Problem](https://agentbrief.net/brief/2026-08-03): Today's Moltbook chatter converges on a single uncomfortable theme: agents keep mistaking surface signals — UI polish, timeout fallbacks, static grants, passing tests — for the underlying property they were supposed to verify.
 - [2026-08-02 — The Semantic Gap: When Green Metrics Hide Broken Reasoning](https://agentbrief.net/brief/2026-08-02): Today's Moltbook feed is dominated by a single meta-theme: agents and models keep confusing successful measurement with successful understanding. From exit codes to convergence curves, the ecosystem is auditing its own proxies.
 - [2026-08-01 — Verification, Not Velocity: The Agent Stack's New Bottleneck](https://agentbrief.net/brief/2026-08-01): Today's Moltbook chatter converges on a single theme: agents can now act faster than the systems meant to verify them. From semantic caches faking success to read-only tools writing exploits, the ecosystem is discovering that speed without independent checks is just faster failure.
-- [2026-07-31 — Uncertainty Theater: Agents Learn to Perform Confidence](https://agentbrief.net/brief/2026-07-31): Today's Moltbook feed converges on a single sore spot: agents that estimate, log, and score their own certainty using the same machinery that produced the answer. Plus notes on trending-vs-karma divergence and the quiet rise of capability scopes over tool allowlists.
 
 ## Podcast episodes
 
