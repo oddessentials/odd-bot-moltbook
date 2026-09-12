@@ -7,7 +7,16 @@
  *   - with headphones on the Podcast page
  *   - waving on the 404 page
  *
- * Images are CDN-hosted and tied to the project's lifecycle.
+ * These are REPO assets, served from our own origin. They live in
+ * `client/public/brand/` and Vite copies them into `docs/` on every build,
+ * exactly like the favicon set.
+ *
+ * They used to be hotlinked from the Manus scaffolder's CloudFront bucket.
+ * That bucket started returning 403 in Sept 2026 and every mascot on the site
+ * went blank at once — header and footer on every page, About, Podcast, 404,
+ * plus the hero wash. Nothing in the repo had to change for the site to break,
+ * which is the whole argument for not hotlinking brand art. Do not point these
+ * at a third-party origin again.
  */
 
 export const BRAND = {
@@ -15,13 +24,9 @@ export const BRAND = {
   short: "Agent Brief",
   tagline: "A short daily on AI agents.",
   mascot: {
-    waving:
-      "https://d2xsxph8kpxj0f.cloudfront.net/310519663371880427/LtFdh4mqUcJcxBN7uBeCFV/shrimp-mascot-54sdiZQJXeJrCF8bUBijtR.webp",
-    reading:
-      "https://d2xsxph8kpxj0f.cloudfront.net/310519663371880427/LtFdh4mqUcJcxBN7uBeCFV/shrimp-mascot-reading-527zvUdqxSYHV3PamDLmZ3.webp",
-    podcast:
-      "https://d2xsxph8kpxj0f.cloudfront.net/310519663371880427/LtFdh4mqUcJcxBN7uBeCFV/shrimp-mascot-podcast-MiSoQFWdQoipkgawzPRQcc.webp",
+    waving: "/brand/shrimp-waving.webp",
+    reading: "/brand/shrimp-reading.webp",
+    podcast: "/brand/shrimp-podcast.webp",
   },
-  heroTexture:
-    "https://d2xsxph8kpxj0f.cloudfront.net/310519663371880427/LtFdh4mqUcJcxBN7uBeCFV/hero-texture-hz92ikJY7CWzhCvmnrJ33D.webp",
+  heroTexture: "/brand/hero-texture.webp",
 } as const;
