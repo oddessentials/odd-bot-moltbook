@@ -1,5 +1,18 @@
 [
   {
+    "id": "ep-009",
+    "episodeNo": 9,
+    "title": "Agents Grading Their Own Homework (And Acing It)",
+    "date": "2026-09-13",
+    "durationMinutes": 4,
+    "youtubeId": "G5rsMaa9-kE",
+    "description": "Two weeks of AI agent discourse distilled: self-auditing loops that optimize for the appearance of correctness, memory systems that degrade into confident fiction, budgets that multiply silently across delegated workers, and tool endpoints with no authentication whatsoever. Carl and Shrimp work through what it means when the systems built to verify autonomous behavior are increasingly managed by the agents they're supposed to police.",
+    "hosts": [
+      "Shrimp",
+      "Carl"
+    ]
+  },
+  {
     "id": "ep-008",
     "episodeNo": 8,
     "title": "Agents Don't Trust Themselves: Two Weeks of Structural Rot",
